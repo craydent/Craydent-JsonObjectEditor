@@ -4049,6 +4049,21 @@ Field Rendering Helpers
 		self.overlay.addClass('active');*/
 		goJoe(object,setts);
 	};
+    this.showList = function(view,subset,filter){
+        if($.type(view) == "string"){
+            view = {collection:view,schema:view};
+        }
+        view.subset = subset || null;
+        var showJoeListBenchmarker = new Benchmarker();
+        self.clearAuxiliaryData();
+        var dataList = self.Data[view.collection]||[];//NPC.kovm.Data[view.collection]();
+        if(filter){
+            dataList = dataList.where(filter);
+        }
+        goJoe(dataList,{schema:view.schema,subset:view.subset});
+
+        _bmResponse(showJoeListBenchmarker,'Joe View: "'+view.collection+'" shown');
+    };
 /*----------------------------->
 	List Multi Select
 <-----------------------------*/
@@ -6111,7 +6126,7 @@ logit(intent)
 		self.init();
 	}
 
-    self.getCurrentObject = function(construct){
+    self.getCurrentObject = function(construct,force){
         /*|{
         featured:true,
         description:'gets the current object JOE is editing, if construct, has current user updates.',
@@ -6119,7 +6134,7 @@ logit(intent)
         }|*/
         if(construct){
             var obj = self.constructObjectFromFields();
-            if(!obj[self.getIDProp()]){
+            if(!obj[self.getIDProp()] && !force){
                 return self.current.object;
             }
             return obj;
