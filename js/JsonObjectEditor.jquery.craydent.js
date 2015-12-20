@@ -351,8 +351,17 @@ function JsonObjectEditor(specs){
 		else{self.current.callback = null;}
 
 
-	//setup schema
-		specs.schema = this.setSchema(schema);
+    /*-------------------------
+     String data
+     -------------------------*/
+    if($.type(data) == 'string' && datatype != "string" && self.getDataset(data,{boolean:true})){
+
+        if(!specs.schema && self.schemas[data]){
+            schema = data; }
+        data = self.getDataset(data);
+    }
+
+        /*setup schema*/ specs.schema = this.setSchema(schema);
 	//	specs.schema = ($.type(schema) == 'object')? schema : self.schemas[schema] || null;
 	//	self.current.schema = specs.schema;
 /*-------------------------
@@ -383,12 +392,7 @@ Column Count
 
     }
 
-/*-------------------------
- String
- -------------------------*/
-    if($.type(data) == 'string' && datatype != "string" && self.getDataset(data,{boolean:true})){
-        data = self.getDataset(data);
-    }
+
 
 /*-------------------------
  MultiEdit (Arrays)
@@ -718,6 +722,7 @@ Column Count
         self.current.subset = null;
         self.current.filters = {};
         self.current.fields = [];
+        self.current.schema = null;
 
     };
 	this.cleanUp = function(){

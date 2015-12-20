@@ -90,9 +90,10 @@
     opacity: .6;
     color:#024;
 }
-.joe-fright{  float:right;  }
-.joe-fleft{  float:left;  }
+.joe-fright,joe-fright{  float:right;  }
+.joe-fleft,joe-fleft{  float:left;  }
 .joe-nofloat{  float:none;  }
+.joe-full-right,joe-full-right{float:right;text-align:right;}
 .joe-absolute{
     position:absolute;
     top:0;
