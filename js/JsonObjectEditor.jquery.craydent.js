@@ -2187,7 +2187,7 @@ this.renderHTMLContent = function(specs){
         var autocomplete = dom.next('.joe-text-autocomplete');
         var content,show
             needles = dom.val().toLowerCase().replace( /,/,' ').split(' ');
-            needles.removeAll('');
+            //needles.removeAll('');
 		autocomplete.find('.joe-text-autocomplete-option').each(function(i,obj){
             content = (obj.textContent===undefined) ? obj.innerText : obj.textContent;
             //content = obj.innerHTML;

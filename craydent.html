@@ -3,13 +3,18 @@
 <head>
 <meta charset="utf-8">
 <title>JOE by Craydent</title>
-
+<link rel="stylesheet" href="capp.css"/>
 <!--<script src="_joecraydent.js"></script>-->
 	<script src="_joeinclude.js"></script>
 <script src="js/demo/joe-craydent-config.js"></script>
 </head>
 
-<body>
+<body bgcolor="#5f9ea0">
+<capp-wrapper>
+	<capp-header class="light-bg">
+		<capp-header-button>Item</capp-header-button>
+	</capp-header>
+</capp-wrapper>
 <script>
 	var JOE = new JsonObjectEditor(specs());
 	JOE.init();
