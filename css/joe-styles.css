@@ -80,16 +80,27 @@
 }
 
 
-.joe-title{
+.joe-title, joe-title{
     font-weight: bold;
     font-size: 1.1em;
+    display:block;
+    padding-bottom:4px;
 }
-.joe-subtext{
-    font-size:.8em;
+
+.joe-subtitle, joe-subtitle{
+    font-size:.9em;
+    padding:2px 0
+}
+
+.joe-subtext, joe-subtext{
+    font-size:.7em;
     font-weight: normal;
-    opacity: .6;
+    opacity: .7;
     color:#024;
+    display:block;
+
 }
+
 .joe-fright,joe-fright{  float:right;  }
 .joe-fleft,joe-fleft{  float:left;  }
 .joe-nofloat{  float:none;  }
