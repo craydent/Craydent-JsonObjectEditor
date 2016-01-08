@@ -6,16 +6,40 @@
 <link rel="stylesheet" href="capp.css"/>
 <!--<script src="_joecraydent.js"></script>-->
 	<script src="_joeinclude.js"></script>
-<script src="js/demo/joe-craydent-config.js"></script>
+
+	<script src="capp.js"></script>
+	<script src="js/demo/joe-craydent-config.js"></script>
+	<script> var ENV = {scripts_dir:'/catnap/js/'};</script>
+
+	<script src="http://platform.craydent.com/js/base.js"></script>
+	<script src="http://platform.craydent.com/js/user.js"></script>
+	<script src="/catnap/js/api/catnap.api-0.0.0.1.js"></script>
 </head>
 
 <body bgcolor="#5f9ea0">
 <capp-wrapper>
 	<capp-header class="light-bg">
 		<capp-header-button>Item</capp-header-button>
+		<capp-menu>
+			<capp-menu-label>methods</capp-menu-label>
+			<capp-menu-option onclick="capp.Views.show('method','Craydent')">Craydent</capp-menu-option>
+			<capp-menu-option onclick="capp.Views.show('method','JOE')">JOE</capp-menu-option>
+			<capp-menu-option onclick="capp.Views.show('method','Catnap')">Catnap</capp-menu-option>
+		</capp-menu>
+		<capp-menu>
+			<capp-menu-label>properties</capp-menu-label>
+			<capp-menu-option onclick="capp.Views.show('property','Craydent')">Craydent</capp-menu-option>
+			<capp-menu-option onclick="capp.Views.show('property','JOE')">JOE</capp-menu-option>
+			<capp-menu-option onclick="capp.Views.show('property','Catnap')">Catnap</capp-menu-option>
+		</capp-menu>
 	</capp-header>
+	<capp-view id="joeHolder"><capp-view>
 </capp-wrapper>
 <script>
+	var capp = new CraydentApp({
+
+		autoInit:true
+	});
 	var JOE = new JsonObjectEditor(specs());
 	JOE.init();
 	function preload(){

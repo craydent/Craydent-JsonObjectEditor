@@ -3,13 +3,18 @@ body{
 padding: 0;
 margin: 0;
 }
+capp-header {
+
+    font-family: 'Segoe UI', 'Segoe UI Web Regular', 'Segoe UI Symbol', 'Helvetica Neue', 'BBAlpha Sans', 'S60 Sans', Arial, sans-serif;
+}
 capp-wrapper,
 capp-header,
 capp-header-item,
-capp-header-menu,
+capp-menu,
+capp-menu-label,
+capp-menu-option,
 capp-header-button{
     display:block;
-    font-family: 'Segoe UI', 'Segoe UI Web Regular', 'Segoe UI Symbol', 'Helvetica Neue', 'BBAlpha Sans', 'S60 Sans', Arial, sans-serif;
 }
 
 capp-wrapper .light-bg{
@@ -27,21 +32,52 @@ capp-header{
     height:50px;
 }
 
-capp-header.light-bg capp-header-button:hover{  background:rgba(255,255,255,.7);  }
-capp-header.dark-bg capp-header-button:hover{  background:rgba(0,0,0,.7);  }
+capp-header.light-bg *:hover{
+    background:rgba(255,255,255,.7);  }
+
+/*
+capp-header.light-bg capp-header-button:hover,
+capp-header.light-bg capp-menu-label:hover,
+capp-header.light-bg capp-menu-option:hover{
+    background:rgba(255,255,255,.7);  }
+*/
+
+capp-header.dark-bg capp-header-button:hover,
+capp-header.dark-bg capp-menu-label:hover,
+capp-header.dark-bg capp-menu-option:hover{
+    background:rgba(0,0,0,.7);  }
 
 capp-header.light-bg capp-header-button:active{  background:rgba(255,255,255,.9);  }
 capp-header.dark-bg capp-header-button:active{  background:rgba(0,0,0,.9);  }
 
 capp-header > .fright{  float:right;  }
 capp-header > .fleft{  float:left;  }
-capp-header-menu,
+
+capp-menu,capp-header-button{
+float:left;
+}
+capp-menu-option,capp-menu-label,
 capp-header-button{
     padding:5px 10px;
     cursor:pointer;
-    line-height:50px;
+    line-height:40px;
     transition:.2s;
-    float:left;
     -webkit-user-select: none;
     font-size: 18px;
 }
+
+/*capp-menu*/
+capp-menu-option{
+    display:none;
+    float:none;
+}
+capp-menu:hover {
+    background-color: transparent !important;
+}
+capp-menu.expanded {
+    border-left: 1px solid #fff;
+}
+capp-menu.expanded capp-menu-option{
+    display:block;
+}
+

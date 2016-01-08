@@ -16,6 +16,7 @@ var defs= {
 function codeField(name,comment){
     return {name:name,comment:comment||'',type:'code',asFunction:true}
 }
+
 var JOEschemas = function() {
     return {
 
@@ -353,7 +354,7 @@ var specs = function(){
 
         schemas:JOEschemas(),
         menu:[],
-
+        autoInit:true,
         useBackButton:true,
         useHashlink:true,
         _title:'${itemtype} | ${display}',
