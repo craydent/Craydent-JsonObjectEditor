@@ -37,6 +37,10 @@ function CraydentApp(specs){
 
     };
     /*----------------------END HEADER -------------------------*/
+    /*----------------------BEGIN BODY -------------------------*/
+    this.Body ={};
+
+    /*----------------------END BODY ----------------------*/
 
     /*----------------------BEGIN VIEWS ----------------------*/
     this.Views = {};
@@ -51,6 +55,7 @@ function CraydentApp(specs){
 
     /*----------------------END VIEWS -------------------------*/
 
+
     /*----------------------BEGIN INIT ----------------------*/
     this.init = function(s){
         specs = specs.merge((s||{}));
@@ -61,6 +66,10 @@ function CraydentApp(specs){
     this.initInteractions = function(){
         $('capp-menu-label').click(function(){
             $(this).parent().toggleClass('expanded');
+        })
+
+        $('capp-menu-toggle').click(function(){
+            $('capp-wrapper').toggleClass('expanded');
         })
     };
 

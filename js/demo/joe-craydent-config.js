@@ -9,7 +9,7 @@ var defs= {
     sorter:['name'],
     //dataset: function(){return getNPCData(schemaName)},
     _listID: '_id',
-    _listTitle:'<h4>${name}</h4>'+'<div class="joe-subtext">${_id}</div>'
+    _listTitle:'<joe-title>${name}</joe-title>'+'<div class="joe-subtext">${_id}</div>'
 };
     return $.extend(defs,(extendWith||{}))
 }
@@ -76,11 +76,14 @@ var JOEschemas = function() {
             _listTitle:
             '<joe-full-right><div class="joe-subtext">${class}</div>' +
             '<div class="joe-subtext">${itemtype}</div><div class="joe-subtext">x${count}</div></joe-full-right>'
-            +'<div class="joe-title"><span style="font-weight:normal">${class}.</span>${name}</div>' +
-            '<p class="subtext">${this.comments.description} </p>'+
-            '<div class="joe-subtext">${parameters}</div>',
+            +'<joe-title>' +
+            '<span style="font-weight:normal">${class}.</span>${name}</joe-title>' +
+            '<joe-content>${this.comments.description} </joe-content>'+
+            '<joe-subtext${parameters}</joe-subtext>',
             _title:'&fnof; ${name}',
-            _listMenuTitle:'Methods | ${_listCount}',
+            _listMenuTitle:function(item){
+                return _joe.current.subset.name +' Methods';
+            },
             listmenu:[],
             itemMenu:function(item){
                 var tagsButtons = [];
@@ -139,7 +142,7 @@ var JOEschemas = function() {
                     values:function(){return App.Data.method.concat(App.Data.property).sortBy('name');},
                     locked:true,
                     condition:function(item){return item.subproperties && item.subproperties.length; },
-                    template:'<h4>${propname}</h4>'+'<div class="subtext">${name}</div>'
+                    template:'<joe-title>${propname}</joe-title>'+'<div class="subtext">${name}</div>'
 
                 },
                 'name',
@@ -239,11 +242,11 @@ var specs = function(){
             //all items
             api_item_name:{
                 type:'content',
-                template:'<h2>${class}.${name}(${parameters})</h2>'
+                template:'<joe-title>${class}.${name}(${parameters})</joe-title>'
             },
             api_property_name:{
                 type:'content',
-                template:'<h2>${class}.${name}</h2>'
+                template:'<joe-title>${class}.${name}</joe-title>'
             },
             //name: {label: '${} Name', onblur: 'updateSourceCode()',hidden:true},
             name: {label: '${} Name', onblur: 'updateSourceCode()',hidden:true},
@@ -257,6 +260,34 @@ var specs = function(){
 
             class:{display:'JS Class',locked:true,hidden:true},
             source_code: {
+                label: 'Code', type: 'code',language:'javascript',
+                value:function (item) {
+                    // item = _joe.constructObjectFromFields()|| item;
+                    var evalString = '';
+                    try {
+                        if (item.global_function) {
+                            evalString = eval(item.name);
+                        } else {
+
+                            if (item.ref && eval(item.ref + '.' + item.name)) {
+                                evalString = eval(item.ref + '.' + item.name);
+                            } else {
+                                evalString = (item.ref || 'object') + ' does not have the function ' + item.name;
+                            }
+                        }
+                    } catch (e) {
+                        evalString = 'Could not evalutate: \n' + e;
+                    }
+                    item.__source_code = evalString.toString();
+                    item.__source_code_length = item.__source_code.length;
+                    return evalString;
+                },
+                after:function(item){
+                    return '<joe-fright>'+item.__source_code_length+' chars</joe-fright><joe-clear></joe-clear>';
+                },
+                height:'400px'
+            },
+           /* source_code2: {
                 label: 'Code', type: 'content',
                 run: function (item) {
                     // item = _joe.constructObjectFromFields()|| item;
@@ -278,10 +309,10 @@ var specs = function(){
 
                     return '<code><pre>' + evalString + '</pre></code>';
                 }
-            },
+            },*/
             documentation_content: {
                 label: 'Documentation', type: 'content',
-                condition:function(item){return item.comments},
+                condition:function(item){return !$.isEmptyObject(item.comments)},
                 run:function(item){
                     if(!item.comments){
                         return 'NO item comments /*|{}|*/ in function.';
@@ -293,8 +324,8 @@ var specs = function(){
                             if(item.comments[i] === true || item.comments[i] === false){
                                 h += '<br/><p class="joe-subtext"><b>'+i+': '+item.comments[i]+'</b></p>';
                             }else{
-                                h += '<br/><div class="joe-subtext"><b>'+i+'</b></div>' +
-                                    '<p style="padding:2px 10px 5px 10px;">'+item.comments[i]+'</p>';
+                                h += '<joe-subtitle class="joe-subtext"><b>'+i+'</b></joe-subtitle>' +
+                                    '<p >'+item.comments[i]+'</p>';
                             }
 
 
@@ -358,6 +389,7 @@ var specs = function(){
         useBackButton:true,
         useHashlink:true,
         _title:'${itemtype} | ${display}',
-        documentTitle:true
+        documentTitle:'${name}',
+        container:'#joeHolder'
     }
 };
