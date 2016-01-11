@@ -2288,7 +2288,7 @@ display:none;
     box-sizing:border-box;
     letter-spacing: .5px;
     width:100%;
-    max-width:800px;
+/*    max-width:800px;*/
 }
 
 .joe-object-field input[type=text]:focus {
@@ -2544,9 +2544,9 @@ textarea.joe-rendering-field{
 /*-------------------------
 	i | Image
 -------------------------*/
-input.joe-image-field{
+/*input.joe-image-field{
     width: 90% !important;
-}
+}*/
 .joe-image-field-image {
     margin: 15px 0 10px 0;
     display: block;
