@@ -3874,7 +3874,7 @@ Field Rendering Helpers
         var template = //getProperty('listSchema.'+listSchemaObjIndicator+'.template')
             (listSchema.listView && listSchema.listView.template) || listSchema._listTemplate;
         var title = //getProperty('listSchema.'+listSchemaObjIndicator+'.title')
-            (listSchema.listView && listSchema.listView.title) || listSchema._listTitle;
+            self.propAsFuncOrValue((listSchema.listView && listSchema.listView.title) || listSchema._listTitle,listItem);
 
         if(quick){
             var quicktitle = template || title || '';
