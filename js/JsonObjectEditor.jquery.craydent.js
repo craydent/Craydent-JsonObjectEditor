@@ -1702,10 +1702,10 @@ this.renderHTMLContent = function(specs){
             menu = __defaultObjectButtons;
             customMenu = false;
         }
-		if(typeof menu =='function'){
+		/*if(typeof menu =='function'){
 			menu = menu();
-		}
-
+		}*/
+        menu = self.propAsFuncOrValue(menu);
 
 		var html =
 		'<div class="joe-panel-footer">'+
