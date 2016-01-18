@@ -1,0 +1,244 @@
+/*GLOBALS*/
+body{
+padding: 0;
+margin: 0;
+width:100%;
+height:100%;
+}
+
+fright,.fright{  float:right;  }
+fleft,.fleft{  float:left;  }
+clear,.clear{clear: both;}
+
+capp-header,
+capp-panel,
+capp-font{
+    font-family: 'Segoe UI', 'Segoe UI Web Regular', 'Segoe UI Symbol', 'Helvetica Neue', 'BBAlpha Sans', 'S60 Sans', Arial, sans-serif;
+}
+
+capp-header-item,
+capp-menu,
+capp-menu-label,
+capp-menu-option,
+capp-header-button{
+    display:block;
+    box-sizing: border-box;
+}
+
+capp-wrapper,
+capp-header,
+capp-body,
+capp-panel,
+capp-view,
+capp-absoluteblock{
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    position: absolute;
+    display:block;
+    box-sizing: border-box;
+}
+/*--------------------------- begin CAPP-BG --------------------------------*/
+.capp-bg-light{
+    background:rgba(255,255,255,.5);
+    color:#222;
+}
+.capp-bg-dark{
+    background:rgba(0,0,0,.3);
+    color:#ddd;
+}
+.capp-bg-light *:hover{  background:rgba(255,255,255,.7);  }
+.capp-bg-dark *:hover{  background:rgba(0,0,0,.5);  }
+
+/*--------------------------- end CAPP-BG --------------------------------*/
+
+/*--------------------------- begin CAPP-WRAPPER --------------------------------*/
+capp-wrapper{
+
+}
+/*--------------------------- end CAPP-WRAPPER --------------------------------*/
+capp-button,capp-menu{
+    line-height:50px;
+    height:50px;
+    cursor:pointer
+}
+
+/*--------------------------- begin CAPP-BUTTON /  --------------------------------*/
+capp-button{
+    line-height:40px;
+    height:40px;
+    min-width:40px;
+    padding:5px;
+    display:block;
+}
+capp-button-icon{
+
+}
+/*--------------------------- end CAPP-BUTTON --------------------------------*/
+
+/*--------------------------- begin CAPP-MENU --------------------------------*/
+capp-menu{
+    line-height:200%;
+}
+/*capp-menu,capp-header-button{
+    float:left;
+}
+capp-menu-option,capp-menu-label,
+capp-header-button{
+    padding:5px 10px;
+    cursor:pointer;
+    line-height:40px;
+    transition:.2s;
+    -webkit-user-select: none;
+    font-size: 18px;
+}
+
+capp-menu-option{
+    display:none;
+    float:none;
+}
+capp-menu:hover {
+    background-color: transparent !important;
+}
+capp-menu.expanded {
+    border-left: 1px solid #fff;
+}
+capp-menu.expanded capp-menu-option{
+    display:block;
+}*/
+/*--------------------------- end CAPP-MENU --------------------------------*/
+
+/*---------------------------BEGIN CAPP-HEADER --------------------------------*/
+capp-header{
+    height:50px;
+    bottom:auto;
+    z-index:10;
+}
+
+capp-header > *{
+    float:left
+}
+
+
+/*
+capp-header.light-bg capp-header-button:hover,
+capp-header.light-bg capp-menu-label:hover,
+capp-header.light-bg capp-menu-option:hover{
+    background:rgba(255,255,255,.7);  }
+*/
+/*
+capp-header.dark-bg capp-header-button:hover,
+capp-header.dark-bg capp-menu-label:hover,
+capp-header.dark-bg capp-menu-option:hover{
+    background:rgba(0,0,0,.7);  }
+
+capp-header.light-bg capp-header-button:active{  background:rgba(255,255,255,.9);  }
+capp-header.dark-bg capp-header-button:active{  background:rgba(0,0,0,.9);  }
+
+capp-header > .fright{  float:right;  }
+capp-header > .fleft{  float:left;  }*/
+/*---------------------------END CAPP-HEADER --------------------------------*/
+capp-title {
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,.5);
+    font-size: 21px;
+    letter-spacing: .5px;
+    line-height: 50px;
+    margin-left: 5px;
+}
+
+
+/*--------------------------- begin CAPP-BODY --------------------------------*/
+capp-body{
+    top:50px;
+}
+/*--------------------------- end CAPP-BODY --------------------------------*/
+
+/*---------------------------BEGIN CAPP-VIEW --------------------------------*/
+capp-view {
+    left:50px;
+}
+/*--------------------------- END CAPP-VIEW --------------------------------*/
+
+/*---------------------------BEGIN CAPP-PANEL --------------------------------*/
+capp-panel{
+    right:auto;
+    width:50px;;
+    text-align:center;
+    font-size:14px;
+    transition:.2s;
+    z-index: 2001;
+}
+capp-panel hr {  margin: 0;  }
+capp-panel.expanded {
+    width: 200px;
+    text-align:left;
+}
+/*---------------------------end CAPP-PANEL --------------------------------*/
+
+app-menu-item{
+    display:block;
+    padding:10px;
+    cursor:pointer;
+    color:#eee;
+    transition:.2s;
+}
+
+app-menu-item:hover{
+    background:rgba(0,0,0,.2);
+    color:#fff;
+}
+
+
+.collapsed-menu capp-menu {
+    width: 50px;
+}
+
+.collapsed-menu capp-view {
+    left: 50px;
+}
+.collapsed-menu app-menu-item {
+    height: 50px;
+    padding: 0 5px;
+    line-height: 50px;
+    font-size:9px;
+    text-align:center;
+}
+.collapsed-menu app-menu-item app-menu-title,app-menu-item app-menu-tag
+{
+    display:none;
+}
+.collapsed-menu app-menu-item app-menu-tag
+{
+    display:block;
+}
+capp-menu-toggle{
+    width:50px;
+    float:left;
+    height:50px;
+    text-align: center;
+    line-height:50px;
+    cursor:pointer;
+    display:block;
+/*    background-image: url('img/lightbulb-black.png');
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 24px;*/
+}
+capp-menu-toggle:hover{
+    background-color:rgba(0,0,0,.2);
+}
+
+
+/*APP USER */
+appuser {
+    float: right;
+    line-height: 50px;
+    padding: 0 20px;
+    cursor: pointer;
+}
+
+appuser:hover {
+    background: rgba(0,0,0,.2);
+}

@@ -1,22 +1,23 @@
 /*/---------------------------------------------------------/*/
 /*/ Craydent LLC v1.8.0                                     /*/
-/*/	Copyright 2011 (http://craydent.com/about)          /*/
+/*/	Copyright 2011 (http://craydent.com/about)              /*/
 /*/ Dual licensed under the MIT or GPL Version 2 licenses.  /*/
-/*/	(http://craydent.com/license)                       /*/
+/*/	(http://craydent.com/license)                           /*/
 /*/---------------------------------------------------------/*/
 
 /*----------------------------------------------------------------------------------------------------------------
-/-	Global CONTANTS and variables
-/---------------------------------------------------------------------------------------------------------------*/
+ /-	Global CONSTANTS and variables
+ /---------------------------------------------------------------------------------------------------------------*/
 var __version = "1.8.0",
-__thisIsNewer = true,
-$w = typeof window != "undefined" ? window : {location:(typeof location != "undefined"?location:{href:''}),console:(typeof console != "undefined"?console:{})},
-$d = typeof document != "undefined" ? document : {},
-$l = $w.location;
+    __thisIsNewer = true,
+    $w = typeof window != "undefined" ? window : {location:(typeof location != "undefined"?location:{href:''}),console:(typeof console != "undefined"?console:{})},
+    $g = $w,
+    $d = typeof document != "undefined" ? document : {},
+    $l = $w.location;
 
 if ($w.__craydentLoaded || typeof($c) != "undefined") {
     var __current = ($w.__craydentVersion||$c.VERSION||"").split("."),
-    __thisVersion = __version.split(".");
+        __thisVersion = __version.split(".");
     if(__thisIsNewer = __isNewer(__current,__thisVersion)) {
         $c.VERSION = __version;
     }
@@ -122,11 +123,22 @@ if (__thisIsNewer) {
     };
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	define functions preventing overwriting other framework functions
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	define functions preventing overwriting other framework functions
+     /---------------------------------------------------------------------------------------------------------------*/
     /*----------------------------------------------------------------------------------------------------------------
-    /-	private methods
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	private methods
+     /---------------------------------------------------------------------------------------------------------------*/
+    function __add_fillTemplate_ref (obj){
+        try {
+            var uid = suid();
+            fillTemplate.refs["ref_" + fillTemplate.refs.length] = uid;
+            fillTemplate.refs[uid] = obj;
+            fillTemplate.refs.push(obj);
+            return uid;
+        } catch (e) {
+            error('fillTemplate.__add_fillTemplate_ref', e);
+        }
+    }
     function __and (){
         try {
             var len = arguments.length;
@@ -137,7 +149,7 @@ if (__thisIsNewer) {
             }
             return arguments[len - 1];
         } catch (e) {
-            error('fillTemplate.__or', e);
+            error('fillTemplate.__and', e);
         }
     }
     function __andNotHelper (record, query, operands, index) {
@@ -150,7 +162,7 @@ if (__thisIsNewer) {
                     if (!(prop in operands
                         && _subQuery(record, query[i][prop], prop, index)
                         || _subQuery(record, query[i][prop], "$equals", prop, index)
-                    )) {
+                        )) {
                         return false;
                     }
                 }
@@ -158,6 +170,13 @@ if (__thisIsNewer) {
             return true;
         } catch (e) {
             error('where.__andNotHelper', e);
+        }
+    }
+    function __clean_micro_templates () {
+        var _micro_templates = fillTemplate._micro_templates;
+        for (var id in _micro_templates) {
+            if (!_micro_templates.hasOwnProperty(id)) { continue; }
+            if (!$CSS("[data-craydent-bind*='"+id+"']").length) { delete _micro_templates[id]; }
         }
     }
     function __convert_regex_safe(reg_str) {
@@ -183,32 +202,21 @@ if (__thisIsNewer) {
             error('__convert_regex_safe', e);
         }
     }
-    function __dup (old) {
-        try {
-            for (prop in old){
-                this[prop] = old[prop];
-            }
-        } catch (e) {
-            error('__dup', e);
-        }
-    }
-    function __or (){
-        try {
-            for(var a = 0, len = arguments.length; a<len; a++){
-                if(arguments[a]){
-                    return arguments[a];
-                }
-            }
-            return "";
-        } catch (e) {
-            error('fillTemplate.__or', e);
-        }
-    }
     function __count(arr){
         try {
             return arr.length;
         } catch (e) {
             error('fillTemplate.count', e);
+        }
+    }
+    function __dup (old) {
+        try {
+            for (var prop in old){
+                if (!old.hasOwnProperty(prop)) { continue; }
+                this[prop] = old[prop];
+            }
+        } catch (e) {
+            error('__dup', e);
         }
     }
     function __enum(obj, delimiter, prePost){
@@ -237,27 +245,808 @@ if (__thisIsNewer) {
             error('fillTemplate.enum', e);
         }
     }
+    function __interpreter (template, obj) {
+        try {
+            var codeBlock = /\$\{if .*?\}([\s\S]*)\$\{end_if\}/g.exec(template),
+                ifb = "${if(",
+                efb = "${end_if}";
+//            if (!codeBlock) {
+//                return template;
+//            }
+//            codeBlock = codeBlock[0];
+
+            template = template.replace_all(['${if (',') }'],['${if(',')}']);
+            var ifcount = 0;
+            var efcount = 0;
+            var ifindex = template.indexOf(ifb),
+                efindex = template.indexOf(efb);
+
+            if (ifindex == -1) {
+                return template;
+            }
+            //noinspection CommaExpressionJS
+            ifcount++, efcount++;
+
+
+            var before = template.substring(0,ifindex);
+            template = template.substring(ifindex);
+            ifindex = 0;
+            var blockstart = template.indexOf(')}'),
+                cond = template.substring(5, blockstart).strip();
+
+
+
+            while (ifcount == 1 || ifcount != efcount) {
+                ifindex = template.indexOf(ifb,ifindex+1);
+                if (ifindex > -1) {
+                    if (ifindex < efindex) {
+                        ifcount++;
+                    } else {
+                        efcount++;
+                        efindex = template.indexOf(efb,efindex+1);
+                    }
+                } else {
+                    efindex++;
+                    break;
+                }
+            }
+            if (ifcount == 1) {
+                efindex = template.indexOf(efb);
+            }
+            var block = template.substring(blockstart + 2, efindex),
+                statement = template.substring(0,efindex + efb.length);
+
+            if (cond.contains('${')) {
+                cond = fillTemplate(cond.replace_all(['${','}'],['"${','}"']), obj);
+            }
+            if(!tryEval(cond)) {
+                template = before + template.replace(statement, '');
+            } else {
+//                template = before + template.replace(block, __interpreter(block,obj));
+                template = before + template.replace(statement, __interpreter(block,obj));
+            }
+
+            return __interpreter(template,obj);
+
+
+
+        } catch (e) {
+            error('fillTemplate.interpreter', e);
+        }
+    }
+    function __logic_parser (code, obj, bind) {
+        if (!code) {
+            return "";
+        }
+        var ttc = $c.TEMPLATE_TAG_CONFIG, indexes = [], logic = {};
+        code = code.replace_all(ttc.IGNORE_CHARS,['']);
+        $c.eachProperty(ttc, function (value) {
+            if (!value.begin) { return; }
+            var index = code.indexOfAlt(value.begin);
+            indexes.push(index);
+            logic[index] = value;
+        });
+        var index = Math.min.apply(Math,indexes.condense([-1]));
+
+        if (!logic[index]) { return code; }
+
+        return code.substring(0,index) + logic[index].parser(code.substring(index),obj, bind);
+    }
+    function __observe_helper (obj, callback, acceptList, parent) {
+        try {
+            if ($c.isObject(obj)) { return observe(obj, callback, acceptList, parent); }
+            if (!$c.isArray(obj)) { return; }
+            for (var i = 0, len = obj.length; i < len; i++) {
+                if (!$c.isObject(obj[i])) { continue; }
+                observe(obj[i], callback, acceptList, parent);
+            }
+        } catch(e) {
+            error('observe.observe_helper', e);
+        }
+    }
+    function __on_observable_change (changes) {
+        try {
+            var change = changes[0], obj = change.object, prop = change.name, value = change.oldValue;
+            var _observing = fillTemplate._observing,
+                _micro_templates = fillTemplate._micro_templates;
+            // change values
+            if (obj[prop] != value) {
+                var id_index = _observing.indexOf(obj);
+                var hash = _observing["hash_"+id_index],
+                    pattern = new RegExp(hash+"[a-zA-Z0-9,]*\."+prop+";?|$"),
+                    //nodes = $CSS("[data-craydent-bind*='"+hash+"."+prop+"']");
+                    nodes = Array.prototype.slice.call($CSS("[data-craydent-bind*='"+hash+"']")||[]).filter(function(node){
+                        return pattern.test(node.getAttribute("data-craydent-bind"));
+                    });
+
+                if (!$CSS("[data-craydent-bind*='"+hash+"']").length) {
+                    delete _observing["hash_" + id_index];
+                    return;
+                }
+                for (var i = 0, len = nodes.length; i < len; i++) {
+                    if (nodes[i].isOrphan()) { continue; }
+                    var id = nodes[i].getAttribute("data-craydent-bind").split(":")[0],
+                        tobj = $c.getProperty(_observing,"parents_"+id_index + ".0") || obj;
+
+                    nodes[i].replace(fillTemplate(_micro_templates[id].template.replace_all("${craydent_bind}",hash),tobj).toDomElement());
+                }
+            }
+        } catch(e) {
+            error('observe.on_observable_change', e);
+        }
+    }
+    function __or (){
+        try {
+            for(var a = 0, len = arguments.length; a<len; a++){
+                if(arguments[a]){
+                    return arguments[a];
+                }
+            }
+            return "";
+        } catch (e) {
+            error('fillTemplate.__or', e);
+        }
+    }
+    function __processBlocks (start, end, code, lookups) {
+        lookups = lookups || {};
+        var blocks = [], sindexes = [], sindex = 0, eindexes = [], eindex = 0;
+        while ((sindex = code.indexOfAlt(start, sindex)) != -1 && (eindex = code.indexOfAlt(end, eindex)) != -1) {
+            sindex != -1 && (sindexes.push(sindex), sindex++);
+            eindex != -1 && (eindexes.push(eindex), eindex++);
+        }
+        // if true syntax error, start end missmatch
+        if (sindexes.length != eindexes.length) {
+            blocks.push({id: uid, block: "", body:"", code: code});
+            return blocks;
+        }
+
+        var  j, pairs = OrderedList([], function (a, b) {
+            if (a.end < b.end) { return -1; }
+            if (a.end > b.end) { return 1; }
+            return 0;
+        });
+
+        j = 0;
+        while (j < sindexes.length) {
+            var e = 0;
+            while (eindexes[0] > sindexes[e]) {
+                e++;
+            }
+            e--;
+            pairs.add({begin: sindexes[e], end: eindexes[0]});
+            sindexes.removeAt(e);
+            eindexes.removeAt(0);
+        }
+
+
+
+        var endlength = code.match(end)[0].length;
+        for (var k = 0, len = pairs.size(); k < len; k++) {
+            var uid = "##" + suid() + "##",
+                block = code.slice(pairs[k].begin, pairs[k].end + endlength),
+                beginLength = block.match(start)[0].length,
+                body = code.slice(pairs[k].begin + beginLength, pairs[k].end);
+            code = code.replace(block, uid);
+            blocks.push({id: uid, block: block, body: body, code: code});
+            lookups[uid] = block;
+
+            for (var i = k + 1; i < len; i++) {
+                var offset = block.length - uid.length;
+                pairs[i].end -= offset;
+                if (pairs[i].begin > pairs[k].end) {
+                    pairs[i].begin -= offset;
+                }
+            }
+        }
+
+        return blocks.reverse();
+    }
+    function __parseArithmeticExpr (doc,expr,field) {
+        try {
+            var value;
+            switch (field) {
+                case "$add":
+                    value = 0;
+                    for (var i = 0, len = expr["$add"].length; i < len; i++) {
+                        value += __processExpression(doc, expr["$add"][i]);
+                    }
+                    return value;
+                case "$subtract":
+                    return __processExpression(doc, expr["$subtract"][0]) - __processExpression(doc, expr["$subtract"][1]);
+                case "$multiply":
+                    value = 1;
+                    for (var i = 0, len = expr["$multiply"].length; i < len; i++) {
+                        value *= __processExpression(doc, expr["$multiply"][i]);
+                    }
+                    return value;
+                case "$divide":
+                    return __processExpression(doc, expr["$divide"][0]) / __processExpression(doc, expr["$divide"][1]);
+                case "$mod":
+                    return __processExpression(doc, expr["$mod"][0]) % __processExpression(doc, expr["$mod"][1]);
+            }
+        } catch (e) {
+            error('aggregate.__parseArithmeticExpr', e);
+        }
+    }
+    function __parseArrayExpr (doc,expr,field) {
+        try {
+            switch (field) {
+                case "$size":
+                    return (__processExpression(doc, expr, field) || []).length;
+            }
+        } catch (e) {
+            error('aggregate.__parseArrayExpr', e);
+        }
+    }
+    function __parseBooleanExpr (doc,expr,field) {
+        try {
+            var arr = [];
+            switch (field) {
+                case "$and":
+                    arr = expr["$and"];
+                    for (var i = 0, len = arr.length; i < len; i++) {
+                        if (!__processExpression(doc, expr[i])) {
+                            return false;
+                        }
+                    }
+                    return true;
+                case "$or":
+                    arr = expr["$or"];
+                    for (var i = 0, len = arr.length; i < len; i++) {
+                        if (__processExpression(doc, expr[i])) {
+                            return true;
+                        }
+                    }
+                    return false;
+                case "$not":
+                    arr = expr["$not"];
+                    return !__processExpression(doc, expr[0]);
+            }
+        } catch (e) {
+            error('aggregate.__parseBooleanExpr', e);
+        }
+    }
+    function __parseComparisonExpr (doc,expr,field) {
+        try {
+            var sortOrder = [
+                    undefined,
+                    null,
+                    Number,
+                    typeof Symbol != "undefined" ? Symbol : "Symbol",
+                    String,
+                    Object,
+                    Array,
+                    typeof BinData != "undefined" ? BinData : "BinData",
+                    typeof ObjectId != "undefined" ? ObjectId : "ObjectId",
+                    Boolean,
+                    Date,
+                    typeof Timestamp != "undefined" ? Timestamp : "Timestamp",
+                    RegExp],
+
+                value1 = __processExpression(doc, expr[field][0]),
+                value2 = __processExpression(doc, expr[field][1]),
+                cmp = null;
+
+            if (value1 == value2) { cmp = 0; }
+            if (value1 < value2) { cmp = -1; }
+            if (value1 > value2) { cmp = 1; }
+
+            if (isNull(cmp)) {
+                value1 = sortOrder.indexOf([null, undefined].contains(value1) ? value1 : value1.constructor);
+                value2 = sortOrder.indexOf([null, undefined].contains(value2) ? value2 : value2.constructor);
+
+                if (value1 < value2) { cmp = -1; }
+                if (value1 > value2) { cmp = 1; }
+            }
+            switch (field) {
+                case "$cmp":
+                    return cmp;
+                case "$eq":
+                    return cmp === 0;
+                case "$gt":
+                    return cmp === 1;
+                case "$gte":
+                    return cmp === 1 || cmp === 0;
+                case "$lt":
+                    return cmp === -1;
+                case "$lte":
+                    return cmp === -1 || cmp === 0;
+                case "$ne":
+                    return cmp !== 0;
+            }
+        } catch (e) {
+            error('aggregate.__parse', e);
+        }
+    }
+    function __parseCond(doc,expr){
+        try {
+            if (!$c.isObject(expr) || !expr['$cond']) {
+                return expr;
+            }
+            // parse $cond
+            var condition = expr['$cond'],
+                boolExpression,
+                thenStatement,
+                elseStatement;
+            if ($c.isArray(condition)) {
+                boolExpression = condition[0];
+                thenStatement = condition[1];
+                elseStatement = condition[2];
+            } else {
+                boolExpression = condition["if"];
+                thenStatement = condition["then"];
+                elseStatement = condition["else"];
+            }
+            //return [doc].where(boolExpression).length ? thenStatement : elseStatement;
+            return __processExpression(doc, boolExpression) ? thenStatement : elseStatement;
+        } catch (e) {
+            error('aggregate.__parseCond', e);
+        }
+
+    }
+    function __parseConditionalExpr (doc,expr,field) {
+        try {
+            switch (field) {
+                case "$cond":
+                    return __parseCond(doc, expr);
+                case "$ifNull":
+                    var value = __processExpression(doc, expr["$ifNull"][0]);
+                    return isNull(value) ? __processExpression(doc, expr["$ifNull"][1]) : value;
+            }
+        } catch (e) {
+            error('aggregate.__parseConditionExpr', e);
+        }
+    }
+    function __parseDateExpr (doc,expr,field) {
+        var dt = __processExpression(doc, expr[field]);
+        try {
+            switch (field) {
+                case "$dayOfYear":
+                    return dt.getDayOfYear();
+                case "$dayOfMonth":
+                    return dt.getDate();
+                case "$dayOfWeek":
+                    return dt.getDay() + 1;
+                case "$year":
+                    return dt.getFullYear();
+                case "$month":
+                    return dt.getMonth() + 1;
+                case "$week":
+                    return dt.getWeek();
+                case "$hour":
+                    return dt.getHours();
+                case "$minute":
+                    return dt.getMinutes();
+                case "$second":
+                    return dt.getSeconds();
+                case "$millisecond":
+                    return dt.getMilliseconds();
+                case "$dateToString":
+                    dt = __processExpression(doc, expr[field].date);
+                    return dt.format(expr[field].format)
+            }
+        } catch (e) {
+            error('aggregate.__parseDateExpr', e);
+        }
+    }
+    function __parseSetExpr (doc,expr,field) {
+        try {
+            switch (field) {
+                case "$setEquals":
+                    for (var i = 1, len = expr[field].length; i < len; i++) {
+                        var set1 = $c.duplicate(__processExpression(doc, expr[field][i - 1])),
+                            set2 = $c.duplicate(__processExpression(doc, expr[field][i]));
+                        if (!$c.isArray(set1) || !$c.isArray(set2)){
+                            //noinspection ExceptionCaughtLocallyJS
+                            throw "Exception: All operands of $setEquals must be arrays. One argument is of type: " +
+                            (typeof (!$c.isArray(set1) ? set1 : set2)).captialize();
+                        }
+                        set1.toSet();
+                        set2.toSet();
+                        if (set1.length != set2.length) { return false; }
+                        for (var j = 0, jlen = set1.length; j < jlen; j++) {
+                            if (!set2.contains(set1[j])) { return false; }
+                        }
+                    }
+                    return true;
+                case "$setIntersection":
+                    var rtnSet = $c.duplicate(__processExpression(doc, expr[field][0])),
+                        errorMessage = "Exception: All operands of $setIntersection must be arrays. One argument is of type: ";
+                    if(!$c.isArray(rtnSet)) {
+                        //noinspection ExceptionCaughtLocallyJS
+                        throw errorMessage + (typeof rtnSet).captialize();
+                    }
+                    rtnSet.toSet();
+                    for (var i = 1, len = expr[field].length; i < len; i++) {
+                        var set1 = $c.duplicate(__processExpression(doc, expr[field][i]));
+                        if (!$c.isArray(set1)){
+                            //noinspection ExceptionCaughtLocallyJS
+                            throw errorMessage + + (typeof set1).captialize();
+                        }
+                        set1.toSet();
+                        if (set1.length < rtnSet.length) {
+                            var settmp = set1;
+                            set1 = rtnSet;
+                            rtnSet = settmp;
+                        }
+                        for (var j = 0; j < rtnSet.length; j++) {
+                            if (!set1.contains(rtnSet[j])) {
+                                rtnSet.removeAt(j);
+                                j--;
+                            }
+                        }
+                        if (!rtnSet.length) { return rtnSet; }
+                    }
+                    return rtnSet;
+                case "$setUnion":
+                    var rtnSet = $c.duplicate(__processExpression(doc, expr[field][0])),
+                        errorMessage = "Exception: All operands of $setUnion must be arrays. One argument is of type: ";
+                    if(!$c.isArray(rtnSet)) {
+                        //noinspection ExceptionCaughtLocallyJS
+                        throw errorMessage + (typeof rtnSet).captialize();
+                    }
+                    //rtnSet.toSet();
+                    for (var i = 1, len = expr[field].length; i < len; i++) {
+                        var arr = $c.duplicate(__processExpression(doc, expr[field][i]));
+                        if (!$c.isArray(arr)){
+                            //noinspection ExceptionCaughtLocallyJS
+                            throw errorMessage + + (typeof arr).captialize();
+                        }
+                        rtnSet = rtnSet.concat(arr);
+                    }
+                    return rtnSet.toSet();
+                case "$setDifference":
+                    var arr1 = $c.duplicate(__processExpression(doc, expr[field][0])),
+                        arr2 = $c.duplicate(__processExpression(doc, expr[field][1])),
+                        rtnSet = [];
+                    if (!$c.isArray(arr1) || !$c.isArray(arr2)){
+                        //noinspection ExceptionCaughtLocallyJS
+                        throw "Exception: All operands of $setEquals must be arrays. One argument is of type: " +
+                        (typeof (!$c.isArray(arr1) ? arr1 : arr2)).captialize();
+                    }
+                    for (var i = 0, len = arr1.length; i < len; i++) {
+                        var item = arr1[i];
+                        if (!arr2.contains(item) && !rtnSet.contains(item)) {
+                            rtnSet.push(item);
+                        }
+                    }
+                    return rtnSet;
+                case "$setIsSubset":
+                    var arr1 = $c.duplicate(__processExpression(doc, expr[field][0])),
+                        arr2 = $c.duplicate(__processExpression(doc, expr[field][1])),
+                        rtnSet = [];
+                    if (!$c.isArray(arr1) || !$c.isArray(arr2)){
+                        //noinspection ExceptionCaughtLocallyJS
+                        throw "Exception: All operands of $setEquals must be arrays. One argument is of type: " +
+                        (typeof (!$c.isArray(arr1) ? arr1 : arr2)).captialize();
+                    }
+                    return $c.isSubset(arr1,arr2);
+                case "$anyElementTrue":
+                    var arr1 = $c.duplicate(__processExpression(doc, expr[field][0])),
+                        falseCondition = [undefined,null,0,false];
+
+                    for (var i = 0, len = arr1.length; i < len; i++) {
+                        var item = arr1[i];
+                        if (!falseCondition.contains(item)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                case "$allElementsTrue":
+                    var arr1 = $c.duplicate(__processExpression(doc, expr[field][0])),
+                        falseCondition = [undefined,null,0,false];
+
+                    for (var i = 0, len = arr1.length; i < len; i++) {
+                        var item = arr1[i];
+                        if (falseCondition.contains(item)) {
+                            return false;
+                        }
+                    }
+                    return true;
+            }
+        } catch (e) {
+            error('aggregate.__parseSetExpr', e);
+        }
+    }
+    function __parseStringExpr (doc,expr,field) {
+        try {
+            switch (field) {
+                case "$concat":
+                    var value = "";
+                    for (var i = 0, len = expr["$concat"].length; i < len; i++) {
+                        value += __processExpression(doc, expr["$concat"][i]);
+                    }
+                    return value;
+                case "$substr":
+                    var index = expr["$substr"][1], length = expr["$substr"][2] < 0 ? undefined : expr["$substr"][2];
+                    return __processExpression(doc, expr["$substr"][0]).substr(index, length);
+                case "$toLower":
+                    return (__processExpression(doc, expr["$toLower"]) || "").toLowerCase();
+                case "$toUpper":
+                    return (__processExpression(doc, expr["$toLower"]) || "").toUpperCase();
+                case "$strcasecmp":
+                    var value1 = (__processExpression(doc, expr["$strcasecmp"][0]) || "").toString(),
+                        value2 = (__processExpression(doc, expr["$strcasecmp"][1]) || "").toString();
+                    if (value1 == value2) {
+                        return 0;
+                    }
+                    if (value1 < value2) {
+                        return -1;
+                    }
+                    if (value1 > value2) {
+                        return 1;
+                    }
+            }
+        } catch (e) {
+            error('aggregate.__parseStringExpr', e);
+        }
+    }
+    function __parseVariableExpr (doc,expr,field) {
+        try {
+            switch (field) {
+                case "$map":
+                    var input = __processExpression(doc, expr[field].input),
+                        v_as = "$" + expr[field].as,
+                        v_in = expr[field]["in"];
+
+                    for (var i = 0, len = input.length; i < len; i++) {
+                        doc[v_as] = input[i];
+                        input[i] = __processExpression(doc, v_in);
+                        delete doc[v_as];
+                    }
+                    return input;
+                case "$let":
+                    var vars = expr[field].vars,
+                        rmProps = [], rtn = null;
+                    for (var prop in vars) {
+                        if (!vars.hasOwnProperty(prop)) {
+                            continue;
+                        }
+                        doc["$" + prop] = __processExpression(doc, vars[prop]);
+                        rmProps.push(prop);
+                    }
+                    rtn = __processExpression(doc, expr[field]["in"]);
+                    for (var i = 0, len = rmProps.length; i < len; i++) {
+                        delete doc[rmProps[i]];
+                    }
+                    return rtn;
+            }
+
+        } catch (e) {
+            error('aggregate.__parseVariableExpr', e);
+        }
+    }
+    function __processAccumulator (doc,accumulator,previousValue,meta) {
+        try {
+            var value = __processExpression(doc, accumulator["$sum"] || accumulator["$avg"] || accumulator["$first"] || accumulator["$last"] || accumulator["$max"] || accumulator["$min"] || accumulator["$push"] || accumulator["$addToSet"]);
+            switch (true) {
+                case !!accumulator["$sum"]:
+                    return value + (previousValue || 0);
+                case !!accumulator["$avg"]:
+                    previousValue = previousValue || {n:0,avg:0};
+                    //if (isNull(previousValue)) {
+                    //    (previousValue = 0).n = 0;
+                    //}
+                    previousValue.avg = ((previousValue.avg / (previousValue.n || 1)) + value) / previousValue.n;
+                    if (meta.length == meta.index + 1) { previousValue = previousValue.avg; }
+                    return previousValue;
+                case !!accumulator["$first"]:
+                    if(isNull(previousValue)) { previousValue = value; }
+                    return previousValue;
+                case !!accumulator["$last"]:
+                    return value;
+                case !!accumulator["$max"]:
+                    return Math.max(value, (previousValue || -9007199254740991));
+                case !!accumulator["$min"]:
+                    return Math.min(value, (previousValue || 9007199254740991));
+                case !!accumulator["$push"]:
+                    return (previousValue || []).push(value);
+                case !!accumulator["$addToSet"]:
+                    previousValue = previousValue || [];
+                    if (!previousValue.contains(value)) { previousValue.push(value); }
+                    return previousValue;
+            }
+        } catch (e) {
+            error('aggregate.__processAccumulator', e);
+        }
+    }
+    function __processExpression (doc,expr) {
+        try {
+            if ($c.isString(expr)) {
+                if (expr[0] == "$") {
+                    expr = expr.substr(1);
+                }
+                return $c.getProperty(doc, expr.replace("$CURRENT.", ""));
+            } else if (!$c.isObject(expr)) {
+                return expr;
+            }
+            //var exprKeys = {
+            //
+            //};
+            for (var field in expr) {
+                if (!expr.hasOwnProperty(field)) {
+                    continue;
+                }
+                var value = expr[field],
+                    literalKeys = ["$literal"],
+                    boolKeys = ["$and", "$or", "$not"],
+                    setKeys = ["$setEquals", "$setIntersection", "$setUnion", "$setDifference", "$setIsSubset", "$anyElementTrue", "$allElementsTrue"],
+                    compareKeys = ["$cmp", "$eq", "$gt", "$gte", "$lt", "$lte", "$ne"],
+                    arithmeticKeys = ["$add", "$subtract", "$multiply", "$divide", "$mod"],
+                    stringKeys = ["$concat", "$substr", "$toLower", "$toUpper", "$strcasecmp"],
+                //searchKeys = ["meta"],
+                    arrayKeys = ["$size"],
+                    variableKeys = ["$map", "$let"],
+                    dateKeys = ["$dayOfYear", "$dayOfMonth", "$dayOfWeek", "$year", "$month", "$week", "$hour", "$minute", "$second", "$millisecond", "$dateToString"],
+                    conditionalKeys = ["$cond", "$ifNull"];
+                //accumulatorKeys = ["$sum", "$avg", "$first", "$last", "$max", "$min", "$push", "$addToSet"];
+
+                switch (true) {
+                    case literalKeys.contains(field):
+                        return expr;
+                    case boolKeys.contains(field):
+                        return __parseBooleanExpr(doc, expr, field);
+                    case setKeys.contains(field):
+                        return __parseSetExpr(doc, expr, field);
+                    case compareKeys.contains(field):
+                        return __parseComparisonExpr(doc, expr, field);
+                    case arithmeticKeys.contains(field):
+                        return __parseArithmeticExpr(doc, expr, field);
+                    case stringKeys.contains(field):
+                        return __parseStringExpr(doc, expr, field);
+                    //case searchKeys.contains(field):
+                    //    return __parseTextSearchExpr (doc,expr);
+                    case arrayKeys.contains(field):
+                        return __parseArrayExpr(doc, expr, field);
+                    case variableKeys.contains(field):
+                        return __parseVariableExpr(doc, expr, field);
+                    case dateKeys.contains(field):
+                        return __parseDateExpr(doc, expr, field);
+                    case conditionalKeys.contains(field):
+                        return __parseConditionalExpr(doc, expr, field);
+                    //case accumulatorKeys.contains(field):
+                    //    return __parseAccumulatorExpr(doc, expr, field);
+                    default:
+                        __processExpression (doc,value);
+                        break;
+                }
+            }
+        } catch (e) {
+            error('aggregate.__parseExpression', e);
+        }
+    }
+    function __processGroup (docs, expr) {
+        try {
+            var _ids = expr._id, doc, i = 0, groupings = {}, results = [], meta = {index:0,length:docs.length/*,stop:false*/};
+            //while(doc = docs[i++]) {
+            for (var i = 0, len = docs.length; i < len; i++,meta.index = i) {
+                var doc = docs[i],result, key = "null", keys;
+                if (_ids) {
+                    keys = {};
+                    for (var prop in _ids) {
+                        if (!_ids.hasOwnProperty(prop)) { continue; }
+                        keys[prop] = __processExpression(doc, _ids[prop]);
+                    }
+                    key = JSON.stringify(keys);
+                }
+                if (!groupings[key]) {
+                    result = groupings[key] = {_id:keys};
+                    results.push(result);
+                } else {
+                    result = groupings[key];
+                }
+                for (var prop in expr) {
+                    if (!expr.hasOwnProperty(prop) || prop == "_id") { continue; }
+                    result[prop] = __processAccumulator(doc, expr[prop],result[prop], meta);
+                    //if (meta.stop) { break; }
+                }
+            }
+            return results;
+        } catch (e) {
+            error('aggregate.__processGroup', e);
+        }
+    }
+    function __processStage(docs, stage) {
+        try {
+            var operator = "", value = {};
+            for (var opts in stage) {
+                if (!stage.hasOwnProperty(opts)) {
+                    continue;
+                }
+                if (operator) {
+                    //noinspection ExceptionCaughtLocallyJS
+                    throw "Exception: A pipeline stage specification object must contain exactly one field.";
+                }
+                operator = opts;
+                value = stage[opts];
+            }
+            switch (opts) {
+                case "$project":
+                    for (var i = 0, len = docs.length; i < len; i++) {
+                        var doc = {};
+                        for (var prop in value) {
+                            if (!value.hasOwnProperty(prop)) {
+                                continue;
+                            }
+                            if ($c.parseBoolean(value[prop])) {
+                                doc[prop] = docs[i];
+                            } else {
+                                doc[prop] = __processExpression(docs[i], value[prop]);
+                            }
+                        }
+                        docs.replaceAt(i, doc);
+                    }
+                    return docs.where({}, value);
+                case "$match":
+                    return docs.where(value);
+                case "$redact":
+                    return _redact(docs, value);
+                case "$limit":
+                    return docs.slice(0, value);
+                case "$skip":
+                    return docs.slice(value);
+                case "$unwind":
+                    return _unwind(docs, value);
+                case "$group":
+                    return __processGroup(docs, value);
+                case "$sort":
+                    var sorter = [];
+                    for (var prop in value) {
+                        if (!value.hasOwnProperty(prop)) { continue; }
+                        var pre = "";
+                        if (value[prop] == -1) {
+                            pre = "!";
+                        }
+                        sorter.push(pre+prop);
+                    }
+                    return docs.sortBy(sorter);
+                //case "$geoNear":
+                //    break;
+                case "$out":
+                    var rtnDocs = $c.duplicate(docs,true);
+                    if ($c.isString(value)) {
+                        $w[value] = rtnDocs;
+                    } else if ($c.isArray(value)) {
+                        value.removeAll();
+                        $c.merge(value,rtnDocs);
+                    }
+                    return rtnDocs;
+            }
+            return docs;
+        } catch (e) {
+            error('aggregate.__processStage', e);
+        }
+    }
     function __run_replace (reg, template, use_run, obj) {
         try {
             var pre = "", post = "", split_param = "|", match;
+            //noinspection CommaExpressionJS
             use_run && (pre="RUN[",post="]", split_param=/;(?!\\)/);
 
             while ((match = reg.exec(template)) && match[1]) {
                 var funcValue = [],
-                func = "";
+                    func = "";
 
                 funcValue = match[1].replace_all(['\\[','\\]'],['[',']']).split(split_param);
-                func = funcValue.splice(0,1)[0];
+                while (funcValue[0].count("{") != funcValue[0].count("}")) {
+                    funcValue[0]+= funcValue[1]+($c.isString(split_param)?split_param:";");
+                    funcValue.splice(1,1);
+                }
+                func = funcValue.splice(0,1)[0].strip(";");
 
                 for (var i = 0, len = funcValue.length; i < len; i++) {
                     if (funcValue[i].contains("${")) {
                         funcValue[i] = fillTemplate(funcValue[i], obj);
                     }
-                    try {funcValue[i] = eval("(" + funcValue[i].replace_all([';\\','\\[','\\]'], [';','[',']']) + ")");} catch (e) {}
+                    try {
+                        //funcValue[i] = eval("(" + funcValue[i].replace_all([';\\','\\[','\\]'], [';','[',']']) + ")");
+                        funcValue[i] = eval("(" + funcValue[i].replace_all([';\\'], [';']) + ")");
+                    } catch (e) {}
                 }
 
                 template = template.contains(match[1]) ? template.replace(match[1], (match[1] = match[1].replace_all(['\\[', '\\]'], ['[', ']']))) : template;
-                template = template.replace_all("${" + pre + match[1] + post +"}", $w.getProperty(func) ? $w.getProperty(func).apply(obj, funcValue) : "");
+                template = template.replace_all("${" + pre + match[1] + post +"}",
+                    $w.getProperty(func) ? $w.getProperty(func).apply(obj, funcValue) : (tryEval("("+func+")")||foo)() || "");
             }
             return template;
         } catch (e) {
@@ -288,10 +1077,17 @@ if (__thisIsNewer) {
     }
     function _condense (obj, check_values) {
         try {
-            var skip = [], arr = [];
+            var skip = [], arr = [], without = false;
+            if (check_values && check_values.constructor == Array) {
+                without = true;
+            }
             for (var i = 0, len = obj.length; i < len; i++) {
                 if (check_values) {
                     var index = i;
+                    if (without && check_values.contains(obj[i])) {
+                        skip.push(i);
+                        continue;
+                    }
                     if (skip.indexOf(i) != -1) {
                         continue;
                     }
@@ -300,7 +1096,7 @@ if (__thisIsNewer) {
                     }
 
                 }
-                (skip.indexOf && skip.indexOf(i) || _indexOf(skip, i)) == -1 && obj[i] && arr.push(obj[i]);
+                (skip.indexOf && skip.indexOf(i) || _indexOf(skip, i)) == -1 && !isNull(obj[i]) && arr.push(obj[i]);
             }
             return arr;
         } catch (e) {
@@ -322,18 +1118,19 @@ if (__thisIsNewer) {
             }
             var arr = projection;
             projection = {};
-            for (var i = 0, len; i < len; i++) {
+            for (var i = 0; i < len; i++) {
                 projection[arr[i]] = 1;
             }
         }
         for (var prop in projection) {
-            if (projection.hop(prop)) {
+            if (projection.has(prop)) {
                 if (prop == "*") {
 //                    _copyWithProjectionHelper(record,copy);
                     copy = $c.duplicate(record);
                 } else if (record[prop] && !$c.isArray(record[prop])) {
                     copy[prop] = record[prop];
                 } else if (record[prop]) {
+                    var del = true;
                     if (prop.slice(-2) == ".$") {
                         prop = prop.slice(0,-2);
                         copy[prop] = record[prop].slice(0,1);
@@ -347,10 +1144,15 @@ if (__thisIsNewer) {
                             length = projection[prop]['$slice'][1];
                         }
                         copy[prop] = record[prop].slice(start, length);
+                    } else if (projection[prop]) {
+                        del = false;
+                        copy[prop] = record[prop];
                     }
-                    if (!copy[prop].length) {
+                    if (del && !copy[prop].length) {
                         delete copy[prop];
                     }
+                } else {
+                    copy[prop] = projection[prop];
                 }
             }
         }
@@ -358,7 +1160,7 @@ if (__thisIsNewer) {
     }
     function _copyWithProjectionHelper(record,copy) {
         for (var prop in record) {
-            if (record.hop(prop)) {
+            if (record.has(prop)) {
                 copy[prop] = record[prop];
             }
         }
@@ -383,7 +1185,8 @@ if (__thisIsNewer) {
             var attributes = this.attributes,
                 ds = {};
             for (var i in attributes) {
-                attribute = attributes[i];
+                if (!attributes.hasOwnProperty(i)) { continue; }
+                var attribute = attributes[i];
                 if (attribute.name.indexOf("data-") == 0) {
                     ds[attribute.name.substring(5)] = attribute.value;
                 }
@@ -392,19 +1195,19 @@ if (__thisIsNewer) {
         } catch (e) {
             error("DOM._dataset", e);
         }
-    };
+    }
     function _defineFunction (name, func, override) {
         try {
             var args = _getFuncArgs(func),
-            fstr = func.toString().replace(/this/g,'obj'),
-            exec = "",
+                fstr = func.toString().replace(/this/g,'obj'),
+                exec = "",
 
             // extra code to account for when this == window
-            extra_code = "if(obj === undefined && this == $c){return;}",
-            fnew = args.length === 0 || (args.length === 1 && !_trim(args[0])) ?
-            //    fstr.toString().replace(/(\(\s*?\)\s*?\{)/, ' ' + name + '(obj){'+extra_code) :
-            fstr.toString().replace(/(\(\s*?\)\s*?\{)/, ' (obj){'+extra_code) :
-            "(" + fstr.toString().replace(/\((.*?)\)\s*?\{/, '(obj,$1){'+extra_code) + ")";
+                extra_code = "if(isNull(obj) && this == $c){return;}",
+                fnew = args.length === 0 || (args.length === 1 && !_trim(args[0])) ?
+                    //    fstr.toString().replace(/(\(\s*?\)\s*?\{)/, ' ' + name + '(obj){'+extra_code) :
+                    fstr.toString().replace(/(\(\s*?\)\s*?\{)/, ' (obj){'+extra_code) :
+                "(" + fstr.toString().replace(/\((.*?)\)\s*?\{/, '(obj,$1){'+extra_code) + ")";
 
             if (!override && eval("typeof("+name+")") !== "undefined") {
                 eval("$c."+name+" = "+fnew);
@@ -416,12 +1219,11 @@ if (__thisIsNewer) {
             error("_defineFunction", ex);
         }
     }
-    _df = _defineFunction;
     function _displayHelper(object, func){
         try {
             return (($d.getElementById(object) && $(object)[func]())
-                || (object instanceof HTMLElement && object[func]())
-                || $w['_'+func+'overwrite'](object));
+            || (object instanceof HTMLElement && object[func]())
+            || $w['_'+func+'overwrite'](object));
         } catch (e) {
             error("_displayHelper." + func, e);
         }
@@ -440,8 +1242,8 @@ if (__thisIsNewer) {
             var ref = arguments[argIndex] || {objects:[{obj:original,path:"this"}]},
                 current_path = arguments[argIndex+1] || "this";
             (arguments[argIndex+2] || (arguments[argIndex+2] = {})) && (arguments[argIndex+2].command = arguments[argIndex+2].command || "");
-            if (!ref.objects.length == 1) {
-                for (prop in obj){
+            if (!(ref.objects.length == 1)) {
+                for (var prop in obj){
                     if (obj.hasOwnProperty(prop)) {
                         delete obj[prop];
                     }
@@ -469,14 +1271,15 @@ if (__thisIsNewer) {
                     return;
                 }
                 obj[prop] = original[prop];
-            }
+            };
             //JSON.parse(JSON.stringify(obj));
             if ($c.isArray(original)) {
                 for (var i = 0, len = original.length; i < len; i++){
                     loop_func.call(obj, i, original, ref, current_path, arguments[argIndex+2]);
                 }
             } else {
-                for (prop in original){
+                for (var prop in original){
+                    if (!original.hasOwnProperty(prop)) { continue; }
                     loop_func.call(obj, prop, original, ref, current_path, arguments[argIndex+2]);
                 }
             }
@@ -488,6 +1291,32 @@ if (__thisIsNewer) {
             return obj;
         } catch (e) {
             error('_duplicate', e);
+        }
+    }
+    function _endsWith (/*str, str1*/) {
+        /*|{
+            "info": "String class extension to check if the string ends with the given string",
+            "category": "String",
+            "parameters":[
+                {"infinite": "any number of arguments can be passed"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.endsWith",
+            "returnType": "(Bool)"
+         }|*/
+        try {
+            for (var i = 0, len = arguments.length; i < len; i++) {
+                if (arguments[i] == this) {
+                    continue;
+                }
+                if (arguments[i] == this.slice(-arguments[i].length)) {
+                    return arguments[i];
+                }
+            }
+            return false;
+        } catch (e) {
+            error('String.endsWith', e);
         }
     }
     function _ext (cls, property, func, override) {
@@ -503,6 +1332,7 @@ if (__thisIsNewer) {
             if (isNaN(num)) {
                 return false;
             }
+            //noinspection JSBitwiseOperatorUsage
             return !(num&1);
         } catch (e) {
             error('_even', e);
@@ -550,8 +1380,8 @@ if (__thisIsNewer) {
             return (cRect && cRect[dimension]) || this["offset" + dimension.capitalize()] || this["scroll" + dimension.capitalize()];
         } catch (e) {
             if (!this.parentNode && this != $d) {
-                var temp = this.cloneNode(1),
-                rtn;
+                var temp = this.cloneNode(true),
+                    rtn;
                 temp.style.visible = 'hidden';
                 temp.style.position = 'absolute';
                 temp["get" + dimension.capitalize()] = $d.body[dimension];
@@ -573,7 +1403,7 @@ if (__thisIsNewer) {
     }
     function _getFuncArgs (func) {
         try {
-            return _condense(_trim(_strip(func.toString(), '(')).replace(/\s*/gi, '').replace(/\/\*.*?\*\//g,'').replace(/.*?\((.*?)\).*/, '$1').split(','));
+            return _condense(_trim(_strip(func.toString(), '(')).replace(/\s*/gi, '').replace(/\/\*.*?\*\//g,'').replace(/.*?\((.*?)\).*/, '$1').split(',')) || [];
         } catch (e) {
             error('_getFuncArgs', e);
         }
@@ -595,7 +1425,7 @@ if (__thisIsNewer) {
     function _indexOf (obj, value) {
         try {
             var len = obj.length,
-            i = 0;
+                i = 0;
             while (i < len) {
                 if (obj[i] === value) return i;
                 ++i;
@@ -615,7 +1445,7 @@ if (__thisIsNewer) {
     }
     function _isArray (obj) {
         try {
-            if (obj === undefined) {return false;}
+            if (isNull(obj)) {return false;}
             return (obj.constructor == Array);
         } catch (e) {
             error('_isArray', e);
@@ -623,7 +1453,7 @@ if (__thisIsNewer) {
     }
     function _isString (obj) {
         try {
-            if (obj === undefined) {return false;}
+            if (isNull(obj)) {return false;}
             return (obj.constructor == String);
         } catch (e) {
             error('_isString', e);
@@ -648,9 +1478,9 @@ if (__thisIsNewer) {
             }
         }
         for (var i = 0, len = obj.length; i < len; i++)  {
-            var record = $c.copyObject(obj[i]), query = {};
-            query[on[1]] = record[on[0]],
-                results = arr.where(query);
+            var record = $c.copyObject(obj[i]), query = {},results;
+            query[on[1]] = record[on[0]];
+            results = arr.where(query);
             if (results.length > 0)  {
                 records.push($c.merge(record, results[0]));
             } else if (!exclusive)  {
@@ -662,7 +1492,7 @@ if (__thisIsNewer) {
         }
         return records;
     }
-    function _makePrecidenceBlocks(condition) {
+    function _makePrecedenceBlocks(condition) {
         try {
             var index = condition.indexOf('('),
                 parts = {before:'',after:'',block:{}};
@@ -670,13 +1500,13 @@ if (__thisIsNewer) {
                 var lindex = condition.lastIndexOf('(');
                 parts.before = condition.substring(0,index).trim();
                 parts.after = condition.substring(lindex).trim();
-                parts.block = _makePrecidenceBlocks(condition.substring(index+1,lindex-1));
+                parts.block = _makePrecedenceBlocks(condition.substring(index+1,lindex-1));
                 return parts;
             }
             parts.block = condition;
             return parts;
         } catch (e) {
-            error('_makePrecidenceBlocks', e);
+            error('_makePrecedenceBlocks', e);
         }
     }
     function _nextElementSibling () {
@@ -688,6 +1518,25 @@ if (__thisIsNewer) {
             return next;
         } catch (e) {
             error("DOM._nextElementSibling", e);
+            return false;
+        }
+    }
+    function _orderListHelper(value, sorter, arr) {
+        try {
+            var ii = 0, i = 0, len = arr.length;
+            if (sorter(value, arr[0]) == -1) { return 0; }
+            if (sorter(value, arr[len - 1]) === 1) { return len; }
+            while (len > 1) {
+                len = Math.ceil(len/2);
+                ii = i + len;
+                var order = sorter(value, arr[ii]);
+                if (order === 0) { return ii; }
+                if (order === 1) { i = ii++; }
+            }
+            return ii;
+
+        } catch (e) {
+            error("OrderedList._orderListHelper", e);
             return false;
         }
     }
@@ -712,53 +1561,54 @@ if (__thisIsNewer) {
                         case (index = predicateClause.indexOf('=')) != -1 :
                             cond[predicateClause.substring(0, index).trim()] = {'$equals':tryEval(predicateClause.substring(index + 1).trim())};
                             aquery['$and'].push(cond);
-                        break;
+                            break;
                         case (index = predicateClause.indexOf('<>')) != -1 :
                             cond[predicateClause.substring(0, index).trim()] = {'$ne':tryEval(predicateClause.substring(index + 1).trim())};
                             aquery['$and'].push(cond);
-                        break;
+                            break;
                         case (index = predicateClause.indexOf('>')) != -1 :
                             cond[predicateClause.substring(0, index).trim()] = {'$gt':tryEval(predicateClause.substring(index + 1).trim())};
                             aquery['$and'].push(cond);
-                        break;
+                            break;
                         case (index = predicateClause.indexOf('>=')) != -1 :
                             cond[predicateClause.substring(0, index).trim()] = {'$gte':tryEval(predicateClause.substring(index + 1).trim())};
                             aquery['$and'].push({'$gte':cond});
-                        break;
+                            break;
                         case (index = predicateClause.indexOf('<')) != -1 :
                             cond[predicateClause.substring(0, index).trim()] = {'$lt':tryEval(predicateClause.substring(index + 1).trim())};
                             aquery['$and'].push(cond);
-                        break;
+                            break;
                         case (index = predicateClause.indexOf('<=')) != -1 :
                             cond[predicateClause.substring(0, index).trim()] = {'$lte':tryEval(predicateClause.substring(index + 1).trim())};
                             aquery['$and'].push(cond);
-                        break;
+                            break;
                         case predicateClause.indexOfAlt(/between/i) == 0 :
                             var nums = predicateClause.replace(/between (.*?) &and (.*?) ( |$)/i,'$1,$2').split(',');
                             aquery['$and'].push({'$gte':tryEval(nums[0])});
                             aquery['$and'].push({'$lte':tryEval(nums[1])});
-                        break;
+                            break;
                         case (index = predicateClause.indexOfAlt(/ in /i)) != -1 :
                             var _in = tryEval(predicateClause.substring(index + 4).trim().replace(/\((.*)\)/,'[$1]'));
                             if (!_in) {
+                                //noinspection ExceptionCaughtLocallyJS
                                 throw "Invalid syntax near 'in'";
                             }
                             cond[predicateClause.substring(0, index).trim()] = _in;
                             aquery['$and'].push({'$in':cond});
-                        break;
+                            break;
                         case (index = predicateClause.indexOfAlt(/is null/i)) != -1 :
                             cond[predicateClause.substring(0, index).trim()] = null;
                             aquery['$and'].push({'$equals':cond});
-                        break;
+                            break;
                         case (index = predicateClause.indexOfAlt(/is not null/i)) != -1 :
                             cond[predicateClause.substring(0, index).trim()] = null;
                             aquery['$and'].push({'$ne':cond});
-                        break;
+                            break;
                         case (index = predicateClause.indexOfAlt(/ like /i)) != -1 :
                             var likeVal = "^" + _trim(predicateClause.substring(index + 6),null,[' ', "'", '"']).replace_all("%",".*?") + "$";
                             cond[predicateClause.substring(0, index).trim()] = {'$regex': new RegExp(likeVal,'i')};
                             aquery['$and'].push(cond);
-                        break;
+                            break;
                     }
                 }
                 query['$or'].push(aquery);
@@ -767,6 +1617,48 @@ if (__thisIsNewer) {
             return query;
         } catch (e) {
             error('where.processClause', e);
+        }
+    }
+    function _querySelectorAll (selector, max) {
+        var style = document.createStyleSheet(), arr = [], allDocs = document.all, i = 0, elem;
+        style.addRule(selector,"k:v");
+        while (elem = allDocs[i++] && arr.length < max) {
+            if (elem.currentStyle.foo === "bar") {
+                arr.push(elem);
+            }
+        }
+        style.removeRule(0);
+        return arr;
+    }
+    function _redact(docs, expr) {
+        try {
+            docs = $c.isArray(docs) ? docs : [docs];
+            var result = [];
+            for (var i = 0, len = docs.length; i < len; i++) {
+                var doc = docs[i], action = __parseCond(doc, expr);
+                if (action == "$$KEEP") {
+                    result.push(doc);
+                } else if (action == "$$DESCEND") { // return all fields at current document without embedded documents
+                    result.push(doc);
+                    for (var prop in doc) {
+                        if (!doc.hasOwnProperty(prop) || $c.isArray(doc[prop]) && !$c.isObject(doc[prop][0]) || !$c.isArray(doc[prop]) && !$c.isObject(doc[prop])) {
+                            continue;
+                        }
+                        doc[prop] = _redact(doc[prop], expr);
+                        if (doc[prop] === undefined) {
+                            delete doc[prop];
+                        }
+                    }
+                } else if (action == "$$PRUNE") {
+                    //return undefined;
+                } else {
+                    //noinspection ExceptionCaughtLocallyJS
+                    throw "exception: $redact's expression should not return anything aside from the variables $$KEEP, $$DESCEND, and $$PRUNE, but returned " + parseRaw(action);
+                }
+            }
+            return result.length ? result : undefined;
+        } catch (e) {
+            error('aggregate._redact', e);
         }
     }
     function _replace_all(replace, subject, flag) {
@@ -778,18 +1670,20 @@ if (__thisIsNewer) {
             var str = this;
             for (var i = 0, len = replace.length; i < len; i++)
             {
-                if (!str.contains(replace[i])) {
+                var reg = new RegExp(__convert_regex_safe(replace[i]), flag)
+                if (!str.contains(reg)) {
                     continue;
                 }
-                str = str.replace(RegExp(__convert_regex_safe(replace[i]), flag), subject[i] || subject[0]);
+                str = str.replace(reg, subject[i] || subject[0]);
             }
-            return str;
+            return str.toString();
         } catch (e) {
             error("_replace_all", e);
         }
     }
     function _run_func_array(funcs, args) {
         try {
+            !$c.isArray(funcs) && (funcs = [funcs]);
             for (var i = 0, len = funcs.length; i < len; i++) {
                 funcs[i].apply(this, args);
             }
@@ -801,10 +1695,11 @@ if (__thisIsNewer) {
         try {
             value = encodeURI(value);
             var ignoreCase = options.ignoreCase || options == "ignoreCase" ? "i" : "",
-            regex = new RegExp('(.*)?(' + variable +'=)(.*?)(([&]|[@])(.*)|$)', ignoreCase),
-            attr = "search",
-            symbol = "&",
-            queryStr = "";
+                regex = new RegExp('(.*)?(' + variable +'=)(.*?)(([&]|[@])(.*)|$)', ignoreCase),
+                attr = "search",
+                symbol = "&",
+                queryStr = "";
+            //noinspection CommaExpressionJS
             attr = variable.indexOf('@') == 0 ? (symbol='', "hash") : attr;
 
             $COMMIT[attr] = $COMMIT[attr] || "";
@@ -812,7 +1707,7 @@ if (__thisIsNewer) {
             if (defer) {
                 $COMMIT[attr] = ($COMMIT[attr] || $l[attr]);
                 queryStr = regex.test($COMMIT[attr]) ?
-                $COMMIT[attr].replace(regex, '$1$2' + value + '$4') :
+                    $COMMIT[attr].replace(regex, '$1$2' + value + '$4') :
                 $COMMIT[attr] + symbol + variable + '=' + value;
                 if (symbol == "&" && queryStr.indexOf('&') == 0) {
                     queryStr = "?" + queryStr.substring(1);
@@ -821,7 +1716,7 @@ if (__thisIsNewer) {
                 $COMMIT.update = true;
             } else {
                 queryStr = regex.test(loc[attr]) ?
-                loc[attr].replace(regex, '$1$2' + value + '$4') :
+                    loc[attr].replace(regex, '$1$2' + value + '$4') :
                 loc[attr] + symbol + variable + '=' + value;
                 if (symbol == "&" && queryStr.indexOf('&') == 0) {
                     queryStr = "?" + queryStr.substring(1);
@@ -830,7 +1725,7 @@ if (__thisIsNewer) {
                 if (attr == 'hash') {
                     $COOKIE("CRAYDENTHASH", loc.hash[0] == '#' ? loc.hash.substring(1) : loc.hash);
                     _invokeHashChange();
-            }
+                }
             }
             return loc;
         } catch (e) {
@@ -859,6 +1754,32 @@ if (__thisIsNewer) {
             error("_setDOMElementProperties", e);
         }
     }
+    function _startsWith (/*str, str1*/) {
+        /*|{
+            "info": "String class extension to check if the string starts with the given string",
+            "category": "String",
+            "parameters":[
+                {"infinite": "any number of arguments can be passed"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.startsWith",
+            "returnType": "(Bool)"
+         }|*/
+        try {
+            for (var i = 0, len = arguments.length; i < len; i++) {
+                if (arguments[i] == this) {
+                    continue;
+                }
+                if (arguments[i] == this.slice(0, arguments[i].length)) {
+                    return arguments[i];
+                }
+            }
+            return false;
+        } catch (e) {
+            error('String.startsWith', e);
+        }
+    }
     function _strip (str, character) {
         try {
             return _trim(str, undefined, character);
@@ -873,6 +1794,7 @@ if (__thisIsNewer) {
             }
 
             for (var prop in obj) {
+                if (!obj.hasOwnProperty(prop)) { continue; }
                 if (prop in operands) {
                     return prop;
                 }
@@ -889,27 +1811,27 @@ if (__thisIsNewer) {
                 field = null;
             }
             var operands = {
-                "$or":1,
-                "$and":1,
-                "$in":1,
-                "$nin":1,
-                "$regex":1,
-                "$gt":1,
-                "$lt":1,
-                "$gte":1,
-                "$lte":1,
-                "$exists":1,
-                "$equals":1,
-                "$ne":1,
-                "$nor":1,
-                "$type":1,
-                "$text":1,
-                "$mod":1,
-                "$all":1,
-                "$size":1,
-                "$where":1,
-                "$elemMatch":1,
-                "$not":1},
+                    "$or":1,
+                    "$and":1,
+                    "$in":1,
+                    "$nin":1,
+                    "$regex":1,
+                    "$gt":1,
+                    "$lt":1,
+                    "$gte":1,
+                    "$lte":1,
+                    "$exists":1,
+                    "$equals":1,
+                    "$ne":1,
+                    "$nor":1,
+                    "$type":1,
+                    "$text":1,
+                    "$mod":1,
+                    "$all":1,
+                    "$size":1,
+                    "$where":1,
+                    "$elemMatch":1,
+                    "$not":1},
                 value = $c.getProperty(record, field || ""),
                 opt = operator,
                 rtn = false;
@@ -939,47 +1861,45 @@ if (__thisIsNewer) {
                         if (isNull(query) || isNull(value)) {
                             return false;
                         }
-                        var q = $c.getValue(query.hasOwnProperty("$equals") ? query['$equals'] : query),
-                            isRegex = q.constructor == RegExp;
-                        
-                        rtn = isRegex ? q.test(value) : 
-                                ($c.isFunction(q) ? q(record, field, index) : value == q);
-                    break;
+                        var q = $c.getValue(query.hasOwnProperty("$equals") ? query['$equals'] : query);
+
+                        rtn = $c.isRegExp(q) ? q.test(value) :
+                            ($c.isFunction(q) ? q(record, field, index) : value == q);
+                        break;
 
                     case "$ne":
                         if (isNull(query) || isNull(value)) {
                             return false;
                         }
-                        var q = query['$ne'],
-                                isRegex = q.constructor == RegExp;
-                        rtn = !(isRegex ? q.test(value) : value == q);
-                    break;
+                        var q = query['$ne'];
+                        rtn = !($c.isRegExp(q) ? q.test(value) : value == q);
+                        break;
 
                     case "$lt":
                         if (isNull(value)) {
                             return false;
                         }
                         rtn = value < query['$lt'];
-                    break;
+                        break;
 
                     case "$lte":
                         if (isNull(value)) {
                             return false;
                         }
                         rtn = value <= query['$lte'];
-                    break;
+                        break;
                     case "$gt":
                         if (isNull(value)) {
                             return false;
                         }
                         rtn = value > query['$gt'];
-                    break;
+                        break;
                     case "$gte":
                         if (isNull(value)) {
                             return false;
                         }
                         rtn = value >= query['$gte'];
-                    break;
+                        break;
                     case "$nor":
                         for(var i = 0, len = query.length; i < len; i++) {
                             if (_subQuery(record,[query[i]],'$or',field, index)) {
@@ -987,26 +1907,26 @@ if (__thisIsNewer) {
                             }
                         }
                         rtn = true;
-                    break;
+                        break;
                     case "$regex":
                         if (isNull(value)) {
                             return false;
                         }
                         rtn = query["$regex"].test(value);
-                    break;
+                        break;
                     case "$exists":
                         var finished = {validPath:0};
                         $c.getProperty(record, field,".",finished);
                         rtn = finished.validPath == query["$exists"];
-                    break;
+                        break;
                     case "$type":
                         if (isNull(value) && isNull(query) || !isNull(value) && value.constructor == query) {
-    //                        return true;
+                            //                        return true;
                             rtn = true;
                             break;
                         }
                         return false;
-                    break;
+                        break;
                     case "$text":
                         //return record.getProperty(field).contains(query['$search']);
                         break;
@@ -1015,7 +1935,7 @@ if (__thisIsNewer) {
                             return false;
                         }
                         rtn = value % query[0] == query[1];
-                    break;
+                        break;
                     case "$all":
                         if (!$c.isArray(value) || !$c.isArray(query)) {
                             return false;
@@ -1026,17 +1946,17 @@ if (__thisIsNewer) {
                             }
                         }
                         rtn = true;
-                    break;
+                        break;
                     case "$size":
                         var val = parseInt(query);
                         if (!$c.isArray(value) || !val && val !== 0) {
                             return false;
                         }
                         rtn = value.length == val;
-                    break;
+                        break;
                     case "$where":
                         rtn = $c.isFunction(query) ? query.call(record) : tryEval.call(record, "(function(){"+query+"}).call(this)");
-                    break;
+                        break;
                     case "$elemMatch":
                         //query = { student: "Jane", grade: { $gt: 85 } } } };
                         if (!$c.isArray(value)) {
@@ -1059,12 +1979,12 @@ if (__thisIsNewer) {
                                 if (_subQuery(record, val, operand, prop, index)) {
                                     brk = true;
                                     break;
-    //                                return true;
+                                    //                                return true;
                                 }
                             }
                         }
                         rtn = brk;
-                    break;
+                        break;
                     case "$or":
                         if (!$c.isArray(query)) {
                             return false;
@@ -1077,26 +1997,25 @@ if (__thisIsNewer) {
                                 }
                                 var subprop = _subFieldHelper(query[i][prop], operands);
                                 if (!(satisfied = prop in operands?
-                                    _subQuery(record, query[i][prop], prop, index) : 
-                                    (subprop ? _subQuery(record, query[i][prop], subprop, prop, index) :
-                                        _subQuery(record, query[i][prop], "$equals", prop, index)))) {
+                                        _subQuery(record, query[i][prop], prop, index) :
+                                        (subprop ? _subQuery(record, query[i][prop], subprop, prop, index) :
+                                            _subQuery(record, query[i][prop], "$equals", prop, index)))) {
                                     break;
                                 }
                             }
                         }
                         rtn = satisfied;
-                    break;
+                        break;
                     case "$and":
                         rtn = __andNotHelper (record, query, operands, index);
-                    break;
+                        break;
                     case "$not":
                         if ($c.isObject(query)) {
                             rtn = !__andNotHelper (record, query, operands, index);
                             break;
                         }
-                        var isRegex =  query == RegExp;
-                        rtn = isRegex ? query.test(value) : value == query;
-                    break;
+                        rtn = $c.isRegExp(query) ? query.test(value) : value == query;
+                        break;
 
 
                     case "$in":
@@ -1109,9 +2028,9 @@ if (__thisIsNewer) {
                             }
                             value = $c.getProperty(record, field);
                             for (var k = 0, klen = query[fieldProp].length; k < klen; k++) {
-                                var isRegex = query[fieldProp][k] && query[fieldProp][k].constructor == RegExp; //array of values  
-                                if (($c.isArray(value) && value.contains(query[fieldProp][k])) 
-                                || (isRegex ? query[fieldProp][k].test(value) : value == query[fieldProp][k])) {
+                                var isRegex = $c.isRegExp(query[fieldProp][k] && query[fieldProp][k]); //array of values  
+                                if (($c.isArray(value) && value.contains(query[fieldProp][k]))
+                                    || (isRegex ? query[fieldProp][k].test(value) : value == query[fieldProp][k])) {
                                     rtn = true;
                                     if (isNIN) {
                                         return !rtn;
@@ -1121,7 +2040,7 @@ if (__thisIsNewer) {
                             }
                             break;
                         }
-                    break;
+                        break;
                 }
             }
             return rtn;
@@ -1132,17 +2051,17 @@ if (__thisIsNewer) {
     function _trim(str, side, characters) {
         try {
             var temp = str,
-            trimChars = {
-                " ":1,
-                "\t":1,
-                "\n":1
-            };
+                trimChars = {
+                    " ":1,
+                    "\t":1,
+                    "\n":1
+                };
             if (characters) {
                 if (_isArray(characters)) {
-                    var char = "", i = 0;
+                    var ch, i = 0;
                     trimChars = {};
-                    while (char = characters[i++]) {
-                        trimChars[char] = 1;
+                    while (ch = characters[i++]) {
+                        trimChars[ch] = 1;
                     }
                 } else if (_isString(characters)) {
                     trimChars = eval('({"'+characters+'":1})');
@@ -1161,6 +2080,28 @@ if (__thisIsNewer) {
             return temp.toString();
         } catch (e) {
             error("_trim", e);
+        }
+    }
+    function _unwind(docs, path) {
+        try {
+            var results = [], doc, i = 0;
+            while (doc = docs[i++]) {
+                var arr = __processExpression(doc, path);
+                if (isNull(arr) || $c.isArray(arr) && arr.isEmpty()) {
+                    continue;
+                } else if (!$c.isArray(arr)) {
+                    //noinspection ExceptionCaughtLocallyJS
+                    throw "Exception: Value at end of $unwind field path '"+path+"' must be an Array, but is a " + (typeof arr).capitalize() +".";
+                }
+                for (var j = 0, jlen = arr.length; j < jlen; j++) {
+                    var dup = $c.duplicate(doc);
+                    $c.setProperty(dup, path, arr[j]);
+                    results.push(dup);
+                }
+            }
+            return results;
+        } catch (e) {
+            error('aggregate._unwind', e);
         }
     }
     function _whereHelper(objs,condition,callback) {
@@ -1189,19 +2130,25 @@ if (__thisIsNewer) {
 
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Class prototypes
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	Class prototypes
+     /---------------------------------------------------------------------------------------------------------------*/
     function addObjectPrototype(name, fn, override) {
-        /*|  {info: "Method to extend the Object Class",
-         *    category: "Global",
-         *    parameters:{
-         *        name: "(String) name of the method to add",
-         *        fn: "(Function) method implementation",
-         *        override: "(Bool) if true, override the previously defined prototype"},
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#addObjectPrototype"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Method to extend the Object Class",
+            "category": "Global",
+            "parameters":[
+                {"name": "(String) name of the method to add"},
+                {"fn": "(Function) method implementation"}],
+
+            "overloads":[{
+                "parameters":[
+                    {"name": "(String) name of the method to add"},
+                    {"fn": "(Function) method implementation"},
+                    {"override": "(Bool) if true, override the previously defined prototype"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#addObjectPrototype",
+            "returnType": "(void)"
+         }|*/
         try {
             var shouldOverride = false;
             if (eval("typeof("+name+")") == "undefined") {
@@ -1235,17 +2182,23 @@ if (__thisIsNewer) {
         _df(name, fn, override);
     }
     function addHTMLPrototype (name, fn, override) {
-        /*|  {info: "Method to extend the HTMLElement Class",
-         *    category: "Global",
-         *    parameters:{
-         *        name: "(String) name of the method to add",
-         *        fn: "(Function) method implementation",
-         *        override: "(Bool) if true, override the previously defined prototype"},
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#addHTMLPrototype"},
-         *    returnType: "(void)"
-         * |*/
-         try {
+        /*|{
+            "info": "Method to extend the HTMLElement Class",
+            "category": "Global",
+            "parameters":[
+                {"name": "(String) name of the method to add"},
+                {"fn": "(Function) method implementation"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"name": "(String) name of the method to add"},
+                    {"fn": "(Function) method implementation"},
+                    {"override": "(Bool) if true, override the previously defined prototype"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#addHTMLPrototype",
+            "returnType": "(void)"
+        }|*/
+        try {
             var prototypeDefined = !!HTMLElement.prototype[name];
             if (prototypeDefined && HTMLElement.prototype[name].overwritten) {
                 override = true;
@@ -1265,82 +2218,246 @@ if (__thisIsNewer) {
     }
     _ao = addObjectPrototype;
     _ah = addHTMLPrototype;
+    _df = _defineFunction;
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Benchmark testing Class
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	Benchmark testing Class
+     /---------------------------------------------------------------------------------------------------------------*/
     function Benchmarker() {
-        /*|  {info: "Class used to measure the run time of code",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#Benchmarker"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Class used to measure the run time of code",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#Benchmarker",
+            "returnType": "(void)"
+        }|*/
         try {
-            this.start = new Date();
-            this.end = "";
             this.executionTime = 0;
-            this.stop = function (func) {
-                this.end = new Date();
-                this.executionTime = (this.end - this.start)/1000;
-                return this.executionTime;
+            this.start = function () {
+                this._start = new Date();
+                this._end = 0;
             };
+            this.stop = function () {
+                this._end = new Date();
+                return this.executionTime = (this._end - this._start) / 1000;
+            };
+            this.start();
         } catch (e) {
             error('BenchMarker', e);
         }
     }
 
+    /*----------------------------------------------------------------------------------------------------------------
+     /-	Collection class
+     /---------------------------------------------------------------------------------------------------------------*/
+    function Cursor (records) {
+        /*|{
+             "info": "Cursor class to facilitate iteration",
+             "category": "Global",
+             "parameters":[
+                {"records": "(Array) Array used to create the iterator to iterate each item"}],
+
+             "overloads":[
+                {"parameters":[
+                    {"records": "(Object) Object used to create the iterator to iterate each property"}]}],
+
+             "description": "http://www.craydent.com/library/1.8.0/docs#Cursor",
+             "returnType": "(Cursor)"
+         }|*/
+        try {
+            var props = [],
+                currentIndex = 0,
+                arr = $c.copyObject(records || []);
+            if ($c.isObject(arr)) {
+                for (var prop in arr) {
+                    if (!arr.hasOwnProperty(prop)) { continue; }
+                    props.push(prop);
+                }
+                props.sort();
+            } else if ($c.isArray(arr)) {
+                for (var i = 0, len = arr.length; i < len; i++) {
+                    props.push(i);
+                }
+            }
+            arr.hasNext = function () { return currentIndex <  props.length; };
+            arr.next = function () {
+                this.current = this[props[currentIndex]];
+                return {value:this[props[currentIndex++]], done:currentIndex >= this.size()};
+            };
+            arr.reset = function () { currentIndex = 0; };
+            arr.setIndex = function (value) { currentIndex = parseInt(value) || 0; };
+            arr.current = arr[props[currentIndex]];
+
+            arr.size = function () { return isNull(this.length) ? $c.itemCount(this) : this.length; };
+            return arr;
+        } catch (e) {
+            error('Cursor', e);
+        }
+    }
+    function OrderedList (records,sorter)  {
+        /*|{
+            "info": "Collection class that filters out duplicate values and maintains an ordered list",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"records": "(Array) Array used to create the initial items in the ordered list"}]},
+                {"parameters":[
+                    {"records": "(Array) Array used to create the initial items in the ordered list"},
+                    {"sorter": "(Function) Function for sorting logic"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#OrderedList",
+            "returnType": "(OrderedList)"
+        }|*/
+        try {
+            sorter = sorter || function(a,b){if (a < b) {return -1;}if (a > b) {return 1;}return 0;};
+            var arr = $c.copyObject(records || []).sort(sorter), nextIndex = 0;
+            arr.add = function(value){
+                if (!this.length) { return this.push(value); }
+                var index = _orderListHelper(value, sorter, this);
+                return this.insertBefore(index, value);
+            };
+            arr.next = function () {
+                return {value:this[nextIndex++], done:nextIndex >= this.size()};
+            };
+            arr.hasNext = function () { return nextIndex < this.size(); };
+            arr.size = function(){return this.length;};
+            return arr;
+        } catch (e) {
+            error('OrderedList', e);
+        }
+    }
+    function Queue (records) {
+        /*|{
+            "info": "Collection class that follows FIFO",
+            "category": "Global",
+            "parameters":[
+                {"records": "(Array) Array used to create the iterator to iterate each item"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#Queue",
+            "returnType": "(Queue)"
+         }|*/
+        try {
+            var arr = $c.copyObject(records || []), nextIndex = 0;
+            arr.enqueue = function(value){
+                this.push(value);
+            };
+            arr.dequeue = function(){
+                return this.slice(0,1);
+            };
+            arr.next = function () {
+                return {value:this[nextIndex++], done:nextIndex >= this.size()};
+            };
+            arr.hasNext = function () { return nextIndex < this.size(); };
+            arr.size = function(){return this.length;};
+            return arr;
+        } catch (e) {
+            error('Queue', e);
+        }
+    }
+    function Set (records) {
+        /*|{
+            "info": "Collection class that filters out duplicate values",
+            "category": "Global",
+            "parameters":[
+                {"records": "(Array) Array used to create the iterator to iterate each item"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#Set",
+            "returnType": "(Set)"
+        }|*/
+        try {
+            var arr = $c.copyObject(records || []), nextIndex = 0;
+            arr.add = function(value){
+                if (!this.contains(value)) {
+                    return !!arr.push(value);
+                }
+                return false;
+
+            };
+            arr.clear = arr.removeAll;
+            arr.clean = arr.toSet;
+            arr.next = function () {
+                return {value:this[nextIndex++], done:nextIndex >= this.size()};
+            };
+            arr.hasNext = function () { return nextIndex < this.size(); };
+            arr.size = function(){return this.length;};
+            arr.clean();
+            return arr;
+        } catch (e) {
+            error('Set', e);
+        }
+    }
+
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Ajax operations
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	Ajax operations
+     /---------------------------------------------------------------------------------------------------------------*/
     function ajax(params){
-        /*|  {info: "Method to make ajax calls",
-         *    category: "Global",
-         *    parameters:[
-         *        {params: "(Object) specs with common properties:<br />(String) url<br />(String) dataType<br />(Mixed) hitch<br />(Function[]) onerror<br />(Function[])onsuccess"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#ajax"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Method to make ajax calls",
+            "category": "Global",
+            "parameters":[
+                {"params": "(Object) specs with common properties:<br />(String) url<br />(String) dataType<br />(Mixed) hitch<br />(Function[]) onerror<br />(Function[])onsuccess"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#ajax",
+            "returnType": "(void)"
+        }|*/
         try {
-            var need_to_shard = false, browser_url_limit = 1500, query, rtn;
+            var need_to_shard = false, browser_url_limit = 1500, query, url, rtn;
             params.dataType = params.dataType || 'json';
             params.hitch = params.hitch || "";
-            params.oncomplete = ($c.isArray(params.oncomplete) ? params.oncomplete : params.oncomplete ? [params.oncomplete] : [function () {}]);
-            params.onbefore = ($c.isArray(params.onbefore) ? params.onbefore : params.onbefore ? [params.onbefore] : [function () {}]);
-            params.onerror = ($c.isArray(params.onerror) ? params.onerror : params.onerror ? [params.onerror] : [function () {}]);
-            params.onsuccess = ($c.isArray(params.onsuccess) ? params.onsuccess : params.onsuccess ? [params.onsuccess] : [function () {}]);
-    //        params.onbefore = ($c.isArray(params.onbefore) ? params.onbefore : [params.onbefore]) || [function (tag,thiss) {}];
-    //        params.onerror = ($c.isArray(params.onerror) ? params.onerror : [params.onerror]) || [function (data,hitch,thiss,context) {}];
-    //        params.onsuccess = ($c.isArray(params.onsuccess) ? params.onsuccess : [params.onsuccess]) || [function (data,hitch,thiss,context) {}];
-            params.query = params.query || "";
-            params.jsonp = params.jsonp || "callback";
+            params.oncomplete = params.oncomplete || foo;
+            params.onbefore = params.onbefore || foo;
+            params.onerror = params.onerror || params.onresponse || foo;
+            params.onsuccess = params.onsuccess || params.onresponse || foo;
+            params.query = params.data || params.query || "";
+            params.jsonp = (params.jsonp || "callback") + "=";
             // commented line below is a valid parameter value
-            /*params.shard_data = params.shard_data;
-            params.context = params.context;
-            params.header = params.header;
-            params.method = params.method;
-            params.onstatechange = params.onstatechange;
-            params.onfileload = params.onfileload;
-            params.onprogress = params.onprogress;
-            params.onabort = params.onabort;
-            params.onerror = params.onerror;
-            params.onloadstart = params.onloadstart;
-            params.run = params.run;
-            params.jsonp = params.jsonp;
-            params.jsonpCallback = params.jsonpCallback*/
+            /*
+             params.shard_data = params.shard_data;
+             params.query = params.query;
+             params.data = params.data;
+             params.url = params.url;
+             params.dataType = params.dataType;
+             params.hitch = params.hitch;
+             params.context = params.context;
+             params.header = params.header;
+             params.method = params.method;
+             params.contentType = params.contentType;
+             params.headers = params.headers;
+             params.onstatechange = params.onstatechange;
+             params.onbefore = params.onbefore;
+             params.oncomplete = params.oncomplete;
+             params.onfileload = params.onfileload;
+             params.onprogress = params.onprogress;
+             params.onabort = params.onabort;
+             params.onerror = params.onerror;
+             params.onresponse = params.onresponse;
+             params.onsuccess = params.onsuccess;
+             params.onloadstart = params.onloadstart;
+             params.run = params.run;
+             params.jsonp = params.jsonp;
+             params.jsonpCallback = params.jsonpCallback
+            */
             params.thiss = this;
             params.url = params.url || "";
 
             if (params.dataType.toLowerCase() == 'jsonp') {
                 var head = $d.getElementsByTagName('head')[0],
-                func = params.jsonpCallback || '_cjson' + Math.floor(Math.random() * 1000000),
-                insert = 'insertBefore',
-                tag = $d.createElement('script');
-                //if (!params.jsonpCallback) {
-                    while (!params.jsonpCallback && $w[func]) {
+                    func = params.jsonpCallback || '_cjson' + Math.floor(Math.random() * 1000000),
+                    insert = 'insertBefore',
+                    tag = $d.createElement('script');
+                while (!params.jsonpCallback && $w[func]) {
                     func = '_cjson' + Math.floor(Math.random() * 1000000);
                 }
                 params.jsonpCallback && (params.onsuccess = $w[func]);
@@ -1351,15 +2468,14 @@ if (__thisIsNewer) {
                         ajax.call(thiss, params);
                     } else {
                         (!data.hasErrors &&
-                            (_run_func_array.call((params.context||params.thiss),params.onsuccess, [data, params.hitch, params.thiss, params.context]) || true)) ||
-                            _run_func_array.call((params.context||params.thiss),params.onerror,[data, params.hitch, params.thiss, params.context]);
+                        (_run_func_array.call((params.context||params.thiss),params.onsuccess, [data, params.hitch, params.thiss, params.context]) || true)) ||
+                        _run_func_array.call((params.context||params.thiss),params.onerror,[data, params.hitch, params.thiss, params.context]);
 
-                        _run_func_array(params.oncomplete);
-    //                    params.oncomplete();
+                        _run_func_array.call((params.context||this),params.oncomplete);
                         if (params.jsonpCallback) {
                             $w[func] = params.onsuccess;
                         } else {
-                            delete $w[func];
+                            try { delete $w[func] } catch(e){ $w[func] = undefined; }
                         }
                     }
                 };
@@ -1385,18 +2501,13 @@ if (__thisIsNewer) {
 
                 // if need_to_shard is true then params.query is an object
                 // and if if need_to_shard is false, params.query is a string ready by sent
-                query = params.query,
+                query = params.query;
                 url = params.url;
                 if (need_to_shard) {
-                    if (params.__FIRST === undefined) {
-                        params.__FIRST = true;
-                    } else {
-                        params.__FIRST = false;
-                    }
+                    params.__FIRST = isNull(params.__FIRST);
                     params.__EOF = true;
                     query = "&EOQ=false";
-                    for (prop in params.query) {
-                        var pair = '&' + encodeURIComponent(prop) + "=" + encodeURIComponent(params.query[prop]);
+                    for (var prop in params.query) {
                         if ((query + prop +"xxx").length > browser_url_limit) {
                             break;
                         }
@@ -1414,9 +2525,9 @@ if (__thisIsNewer) {
                     delete params.query;
                 }
                 query = (params.run ? "&run=" + params.run :"") +
-                    (query || "") +
-                    ((params.__EOF && params.__EOF === "true" && ("&EOQ=true")) || "") +
-                    ((params.__FIRST && ("&FIRST=true")) || "");
+                (query || "") +
+                ((params.__EOF && params.__EOF === "true" && ("&EOQ=true")) || "") +
+                ((params.__FIRST && ("&FIRST=true")) || "");
                 url += (params.url.indexOf('?') != -1 ? "&" : "?") + (params.jsonp || "callback=") + func + (query || "");
 
                 tag['type'] = "text/javascript";
@@ -1426,7 +2537,7 @@ if (__thisIsNewer) {
                 // Attach handlers for all browsers
                 tag.onload = tag.onreadystatechange = function(ev) {
                     try {
-                        if (!this.readyState || /complete|loaded/.test( this.readyState ) ) {
+                        if (!this.readyState || /complete|loaded/.test( this.readyState.toString() ) ) {
                             // Handle memory leak in IE
                             this.onload = this.onreadystatechange = null;
 
@@ -1434,40 +2545,38 @@ if (__thisIsNewer) {
                             if ( head && this.parentNode && IEVersion () == -1) {
                                 head.removeChild( this );
                             }
-                        // Dereference the script
-                        //delete this;
                         }
                     } catch (e) {
                         error('ajax.tag.statechange', e);
                     }
                 };
-                _run_func_array(params.onbefore, [tag, this]);
+                _run_func_array.call((params.context||this),params.onbefore, [tag, this]);
                 head[insert](tag, head.firstChild);
                 rtn = tag;
             } else {
                 var httpRequest = new Request(),
-                fileUpload = httpRequest.upload || {};
+                    fileUpload = httpRequest.upload || {};
                 params.method = params.method || "POST";
-                params.headers = params.headers || Array();
+                params.headers = params.headers || [];
 
                 if (params.query && $c.isObject(params.query)) {
                     params.query = $c.toStringAlt(params.query, '=', '&', true);
                 }
                 params.query = (params.run ? "run=" + params.run :"") + (params.query || "");
                 params.contentType = params.contentType || "application/x-www-form-urlencoded";
-                params.onstatechange = params.onstatechange || function () {};
+                params.onstatechange = params.onstatechange || foo;
 
-                fileUpload.onload = params.onfileload || function () {};
-                fileUpload.onprogress = params.onprogress || function () {};
-                fileUpload.onabort = params.onabort || function () {};
-                fileUpload.onerror = params.onerror || function () {};
-                fileUpload.onloadstart = params.onloadstart || function () {};
+                fileUpload.onload = params.onfileload || foo;
+                fileUpload.onprogress = params.onprogress || foo;
+                fileUpload.onabort = params.onabort || foo;
+                fileUpload.onerror = params.onerror || foo;
+                fileUpload.onloadstart = params.onloadstart || foo;
 
                 if (params.method == "GET") {
                     params.url += params.query ? "?" + params.query : "";
                     params.query = undefined;
                 }
-                _run_func_array(params.onbefore, [httpRequest, this]);
+                _run_func_array.call((params.context||this),params.onbefore, [httpRequest, this]);
                 httpRequest.onreadystatechange = function (xp) {
                     params.onstatechange(xp);
                     var data = _ajaxServerResponse(this);
@@ -1480,7 +2589,7 @@ if (__thisIsNewer) {
                             _run_func_array.call((params.context||this),params.onerror, [this.responseText, params.hitch, params.thiss, params.context, this.status]);
                         }
                     }
-                    _run_func_array(params.oncomplete);
+                    _run_func_array.call((params.context||this),params.oncomplete);
                 };
                 httpRequest.open(params.method, params.url, true);
                 httpRequest.setRequestHeader("Content-type", params.contentType);
@@ -1492,80 +2601,72 @@ if (__thisIsNewer) {
                 httpRequest.send(params.query);
                 rtn = httpRequest;
             }
-            rtn.then = function (callback) {
-                params.onsuccess.push(callback);
-                return this;
-            };
-            rtn.otherwise = function (callback) {
-                params.onerror.push(callback)
-                return this;
-            };
-            rtn['finally'] = function (callback) {
-                params.complete.push(callback)
-                return this;
-            };
+            rtn.then = function (callback) { //noinspection CommaExpressionJS
+                return params.onsuccess.push(callback),this; };
+            rtn.otherwise = function (callback) { //noinspection CommaExpressionJS
+                return params.onerror.push(callback),this; };
+            rtn['finally'] = function (callback) { //noinspection CommaExpressionJS
+                return params.complete.push(callback),this; };
             return rtn
         } catch (e) {
             error("ajax", e);
         }
     }
     function Request() {
-        /*|  {info: "Create cross browser XMLHttpRequest object",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#Request"},
-         *    returnType: "(XMLHttpRequest)"
-         * |*/
+        /*|  {"info": "Create cross browser XMLHttpRequest object",
+         "category": "Global",
+         "parameters":[],
+
+         "description": "http://www.craydent.com/library/1.8.0/docs#Request",
+         "returnType": "(XMLHttpRequest)"}
+         |*/
+        var ajaxHttpCaller;
         try {
-            var ajaxHttpCaller;
+            //request object for mozilla
+            ajaxHttpCaller = new XMLHttpRequest();
+        } catch (ex) {
+            //request object for IE
             try {
-                //request object for mozilla
-                ajaxHttpCaller = new XMLHttpRequest();
+                ajaxHttpCaller = new ActiveXObject("Msxml2.XMLHTTP");
             } catch (ex) {
-                //request object for IE
                 try {
-                    ajaxHttpCaller = new ActiveXObject("Msxml2.XMLHTTP");
-                } catch (ex) {
-                    try {
-                        ajaxHttpCaller = new ActiveXObject("Microsoft.XMLHTTP");
-                    } catch (ex) {
-                        return null;
-                    }
+                    ajaxHttpCaller = new ActiveXObject("Microsoft.XMLHTTP");
+                } catch (ex) //noinspection JSConstructorReturnsPrimitive
+                {
+                    error("Request", e);
+                    return null;
                 }
             }
-            return ajaxHttpCaller;
-        } catch (e) {
-            error("Request", e);
         }
+        return ajaxHttpCaller;
     }
     /*Responsivizer*/
-    // Responsize actions for 3 tiers
-    // by Corey Hadden
-    //    var Responsive;
-    //$(document).ready(initLayout);
-    //
-    //function initLayout(){
-    //    initResponsive();
-    //}
-    //
-    //function initResponsive(){
-    //    $c.Responsive = new Responsivizer();
-    //    //updateDebug();
-    //    window.onresize = respond;
-    //}
-    //function respond(){
-    //    $c.Responsive.respond();
-    //    var rsize = ''
-    //    updateDebug();
-    //}
+    /* Responsive actions for 3 tiers
+     by Corey Hadden
+     var Responsive;
+     $(document).ready(initLayout);
 
-    //function updateDebug(){
-    //    var html =
-    //    "css: "+$('body')[0].className+
-    //    "["+"w"+$(window).width()+" | h"+$(window).height()+']';
-    //    $('#debug').html(html);
-    //}
+     function initLayout(){
+     initResponsive();
+     }
+
+     function initResponsive(){
+     $c.Responsive = new Responsivizer();
+     //updateDebug();
+     window.onresize = respond;
+     }
+     function respond(){
+     $c.Responsive.respond();
+     var rsize = ''
+     updateDebug();
+     }
+
+     function updateDebug(){
+     var html =
+     "css: "+$('body')[0].className+
+     "["+"w"+$(window).width()+" | h"+$(window).height()+']';
+     $('#debug').html(html);
+     }*/
 
     function Responsivizer(){
         this.Body = $d.getElementsByTagName('body')[0];
@@ -1606,93 +2707,100 @@ if (__thisIsNewer) {
             }
             this.Body.className = newBodyClass;
 
-        }
+        };
 
         this.updateInfo = function(){
             this.winW = $(window).width();
             this.winH = $(window).height();
-        }
+        };
 
         this.respond();
         return this;
     }
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	helper operations
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	helper operations
+     /---------------------------------------------------------------------------------------------------------------*/
     /*  $COOKIE
      *  options can have the properties:
      *      expiration : int
      *      path : string
      **/
     function $COOKIE(key, value, options) {
-        /*|  {info: "Get/set Cookies",
-         *    category: "Global",
-         *    parameters:[
-         *        {key: "(String) Key for cookie value"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {key: "(String) Key for cookie"},
-         *            {option: "(Object) Specify delete"}]},
-         *        {parameters:[
-         *            {keyValue: "(Object) Specify the key value pair"},
-         *            {option: "(Object) Specify path, domain, and/or expiration of cookie"}]},
-         *        {parameters:[
-         *          {key: "(String) Key for cookie value"},
-         *          {value: "(String) Value to store"},
-         *          {option: "(Object) Specify path and/or expiration of cookie"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#$COOKIE"},
-         *    returnType: "(Mixed)"
-         * |*/
+        /*|{
+            "info": "Get/set Cookies",
+            "category": "Global",
+            "featured": true,
+            "parameters":[
+                {"key": "(String) Key for cookie value"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"key": "(String) Key for cookie"},
+                    {"option": "(Object) Specify delete"}]},
+                {"parameters":[
+                    {"keyValue": "(Object) Specify the key value pair"},
+                    {"option": "(Object) Specify path, domain, and/or expiration of cookie"}]},
+                {"parameters":[
+                    {"key": "(String) Key for cookie value"},
+                    {"value": "(String) Value to store"},
+                    {"option": "(Object) Specify path and/or expiration of cookie"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#$COOKIE",
+            "returnType": "(Mixed)"
+        }|*/
         try {
             options = options || {};
-            var c = $d.cookie, path = "", domain = "";
+            var c = $d.cookie, path = "", domain = "",keys = [], values=[];
             options.cookie && (c = options.cookie);
             if($c.isObject(key)) {
-                for (prop in key) {
-                    options = value;
-                    value = key[prop];
-                    key = prop;
-                    break;
+                options = value;
+                for (var prop in key) {
+                    if (!key.hasOwnProperty(prop)) { continue; }
+                    //value = key[prop];
+                    //key = prop;
+                    //break;
+                    value.push(JSON.stringify(key[prop]));
+                    keys.push(prop);
                 }
+            } else if (arguments.length > 1) {
+                keys.push(key);
+                values.push(JSON.stringify(value));
             }
 
-            if (!c && !value) {return;}
+            if (!c && !values.length) { return {}; }
             if (options.path && $c.isString(options.path)) {path = 'path=' + options.path + ';'}
             if (options.domain && $c.isString(options.domain)) {domain = 'domain=' + options.domain + ';'}
-            if (options.delete) {
+            if (options["delete"]) {
                 $d.cookie = key + '=; expires=Thu, 01 Jan 1970 00:00:01 GMT;' + path + domain;
                 return true;
             }
 
-            if (value) {
+            if (values.length) {
                 var expires = "";
                 if ($c.isInt(options.expiration)) {
                     var dt = new Date();
                     dt.setDate(dt.getDate() + options.expiration);
                     expires = ";expires=" + dt.toUTCString();
                 }
-//                if ($c.isString(options.path)) {
-//                    path = "; path=/" + options.path;
-//                }
-                key = encodeURIComponent(key);
-                value = encodeURIComponent(value);
-                $d.cookie = key + "=" + value + expires + path + domain;
-                return;
+                for (var j = 0, jlen = keys.length; j < jlen; j++) {
+                    //key = encodeURIComponent(keys[i]);
+                    //value = encodeURIComponent(values[i]);
+                    $d.cookie = encodeURIComponent(keys[j]) + "=" + encodeURIComponent(values[j]) + expires + path + domain;
+                }
+                return true;
             }
             var cookies = {},
                 arr = c.split(/[,;]/);
             for (var i = 0, len = arr.length; i < len; i++) {
                 var cookie = arr[i],
-                parts = cookie.split(/=/, 2),
+                    parts = cookie.split(/=/, 2),
 //                name = decodeURIComponent($c.ltrim(parts[0])),
-                name = decodeURIComponent(parts[0] && parts[0].ltrim && parts[0].ltrim() || ""),
-                value = parts.length > 1 ? decodeURIComponent($c.rtrim(parts[1])) : null;
-                cookies[name] = value;
+                    name = decodeURIComponent(parts[0] && parts[0].ltrim && parts[0].ltrim() || ""),
+                    value = parts.length > 1 ? decodeURIComponent($c.rtrim(parts[1])) : null;
+                cookies[name] = tryEval(value) || value;
                 if (key && key == name) {
-                    return value;
+                    return cookies[name];
                 }
             }
 
@@ -1705,43 +2813,45 @@ if (__thisIsNewer) {
         }
     }
     function $GET(variable, options) {
-        /*|  {info: "Retrieve all or specific variables in the url",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {keyValue: "(Object) specify the key value pair"}]}
-         *        {parameters:[
-         *            {keyValue: "(Object) specify the key value pair"},
-         *            {options: "(Object) options to defer, ignore case, etc"}]},
-         *        {parameters:[
-         *          {key: "(String) key for query value"},
-         *          {value: "(String) value to store"}]},
-         *        {parameters:[
-         *          {key: "(String) key for query value"},
-         *          {value: "(String) value to store"},
-         *          {options: "(Object) Options to defer, ignore case, etc"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#$GET"},
-         *    returnType: "(Mixed)"
-         * |*/
+        /*|{
+            "info": "Retrieve all or specific variables in the url",
+            "category": "Global",
+            "featured": true,
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"keyValue": "(Object) specify the key value pair"}]}
+                {"parameters":[
+                    {"keyValue": "(Object) specify the key value pair"},
+                    {"options": "(Object) options to defer, ignore case, etc"}]},
+                {"parameters":[
+                    {"key": "(String) key for query value"},
+                    {"value": "(String) value to store"}]},
+                {"parameters":[
+                    {"key": "(String) key for query value"},
+                    {"value": "(String) value to store"},
+                    {"options": "(Object) Options to defer, ignore case, etc"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#$GET",
+            "returnType": "(Mixed)"
+        }|*/
         try {
             if (!variable) {
                 var allkeyvalues = {},
-                mapFunc = function(value){
-                    if (value == "") {
-                        return;
-                    }
-                    var keyvalue = value.split('='),
-                    len = keyvalue.length;
-                    if (len > 2) {
-                        for (var i = 2; i < len; i++) {
-                            keyvalue[1] += keyvalue[i];
+                    mapFunc = function(value){
+                        if (value == "") {
+                            return;
                         }
-                    }
-                    return allkeyvalues[keyvalue[0]] = keyvalue[1];
-                };
+                        var keyvalue = value.split('='),
+                            len = keyvalue.length;
+                        if (len > 2) {
+                            for (var i = 2; i < len; i++) {
+                                keyvalue[1] += keyvalue[i];
+                            }
+                        }
+                        return allkeyvalues[keyvalue[0]] = keyvalue[1];
+                    };
 
                 ($l.search[0] == "?" ? $l.search.substr(1) : $l.search).split('&').map(mapFunc);
                 ($l.hash[0] == "#" ? $l.hash.substr(1) : $l.hash).split('@').map(mapFunc);
@@ -1749,10 +2859,10 @@ if (__thisIsNewer) {
             }
             options = options || {};
             var ignoreCase = options.ignoreCase || options == "ignoreCase" ? "i" : "",
-            defer = !!$COMMIT.update && (options.defer || options == "defer"),
-            regex = new RegExp("[\?|&|@]" + variable + "=", ignoreCase),
-            attr = "search",
-            location = {};
+                defer = !!$COMMIT.update && (options.defer || options == "defer"),
+                regex = new RegExp("[\?|&|@]" + variable + "=", ignoreCase),
+                attr = "search",
+                location = {};
             location.hash = $l.hash;
             location.search = $l.search;
 
@@ -1761,7 +2871,7 @@ if (__thisIsNewer) {
                 location.search = $COMMIT.search || "";
             } else if (options.url || $c && $c.isString && ($c.isString(options) && (options.indexOf("?") != -1 || options.indexOf("#") != -1))) {
                 var query = options.url || options,
-                hindex, qindex = query.indexOf("?");
+                    hindex, qindex = query.indexOf("?");
 
                 qindex != -1 && (query = query.substr(qindex));
 
@@ -1788,26 +2898,28 @@ if (__thisIsNewer) {
         }
     }
     function $SET(keyValuePairs, options) {
-        /*|  {info: "Store variable in the url",
-         *    category: "Global",
-         *    parameters:[
-         *        {keyValuePairs: "(Object[]) specify the key value pairs"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {keyValuePairs: "(Object[]) specify the key value pairs"},
-         *            {options: "(Object) options to defer, no history, etc"}]},
-         *        {parameters:[
-         *            {key: "(String) variable name"},
-         *            {value: "(String) value to set"}]},
-         *        {parameters:[
-         *            {key: "(String) variable name"},
-         *            {value: "(String) value to set"},
-         *            {options: "(Object) options to defer, no history, etc"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#$SET"},
-         *    returnType: "(Mixed)"
-         * |*/
+        /*|{
+            "info": "Store variable in the url",
+            "category": "Global",
+            "featured": true,
+            "parameters":[
+                {"keyValuePairs": "(Object[]) specify the key value pairs"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"keyValuePairs": "(Object[]) specify the key value pairs"},
+                    {"options": "(Object) options to defer, no history, etc"}]},
+                {"parameters":[
+                    {"key": "(String) variable name"},
+                    {"value": "(String) value to set"}]},
+                {"parameters":[
+                    {"key": "(String) variable name"},
+                    {"value": "(String) value to set"},
+                    {"options": "(Object) options to defer, no history, etc"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#$SET",
+            "returnType": "(Mixed)"
+        }|*/
         try {
             if (arguments.length == 3 || $c.isString(keyValuePairs)) {
                 var variable = keyValuePairs;
@@ -1817,11 +2929,11 @@ if (__thisIsNewer) {
             } else if (!options) {
                 options = {};
             }
-            var defer = !!(options.defer || options == "defer");
-            loc = {
-                'search' : $l.search,
-                'hash' : $l.hash
-            };
+            var defer = !!(options.defer || options == "defer"),
+                loc = {
+                    'search' : $l.search,
+                    'hash' : $l.hash
+                };
             if ($c.isArray(keyValuePairs)) {
                 for (var i = 0, len = keyValuePairs.length; i < len; i++) {
                     var keyValuePair = keyValuePairs[i];
@@ -1837,17 +2949,17 @@ if (__thisIsNewer) {
             }
 
             if (!defer) {
-                    var noHistory = options.noHistory || options == "noHistory" || options == "h";
-                    if (noHistory) {
-                        if(loc.hash[0] != "#") {
-                            loc.hash = "#" + loc.hash;
-                        }
-                        if (loc.search && loc.search[0] != "?") {
-                            loc.search = "?" + loc.search;
-                        }
-                        $l.replace(loc.search + loc.hash);
-                        return;
+                var noHistory = options.noHistory || options == "noHistory" || options == "h";
+                if (noHistory) {
+                    if(loc.hash[0] != "#") {
+                        loc.hash = "#" + loc.hash;
                     }
+                    if (loc.search && loc.search[0] != "?") {
+                        loc.search = "?" + loc.search;
+                    }
+                    $l.replace(loc.search + loc.hash);
+                    return;
+                }
                 $l.hash = loc.hash;
                 if ($l.search.trim() != loc.search.trim()) {
                     $l.search = loc.search;
@@ -1858,31 +2970,37 @@ if (__thisIsNewer) {
         }
     }
     function $DEL(variables, options) {
-        /*|  {info: "Delete variable in url",
-         *    category: "Global",
-         *    parameters:[
-         *        {variables: "(String[]) variable names"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {variables: "(String[]) variable names"},
-         *            {options: "(Object) options to ignoreCase, defer, etc"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#$DEL"},
-         *    returnType: "(Bool)"
-         * |*/
+        /*|{
+            "info": "Delete variable in url",
+            "category": "Global",
+            "featured": true,
+            "parameters":[
+                {"variables": "(String[]) variable names"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"variables": "(String[]) variable names"},
+                    {"options": "(Object) options to ignoreCase, defer, etc"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#$DEL",
+            "returnType": "(Bool)"
+        }|*/
         try {
             if ($c.isString(variables)) {
                 variables = [variables];
             }
             options = options || {};
             var ignoreCase = options.ignoreCase || options == "ignoreCase" ? "i" : "",
-            defer = options.defer || options == "defer" ? true : false,
-            regex, attr;
+                defer = !!(options.defer || options == "defer"),
+                loc = {
+                    'search' : $l.search,
+                    'hash' : $l.hash
+                },
+                regex, attr;
             for (var i = 0, len = variables.length; i < len; i++) {
                 var variable = variables[i];
-                    regex = new RegExp("[\?|&|@]" + variable + "=", ignoreCase),
-                    attr = "search";
+                regex = new RegExp("[\?|&|@]" + variable + "=", ignoreCase);
+                attr = "search";
                 if (regex.test($l.hash)) {
                     attr = 'hash';
                 } else if (!regex.test($l.search)){
@@ -1894,10 +3012,21 @@ if (__thisIsNewer) {
                 regex = new RegExp('([&]?|[@])(' + variable + '=([^&|^@]*)[&]?)', ignoreCase);
 
                 if (!defer) {
-                    $l[attr] = $l[attr].replace(regex, '');
-                        if (attr == 'hash') {
-                            _invokeHashChange();
+                    var noHistory = options.noHistory || options == "noHistory" || options == "h";
+                    if (noHistory) {
+                        if(loc.hash[0] != "#") {
+                            loc.hash = "#" + loc.hash;
                         }
+                        if (loc.search && loc.search[0] != "?") {
+                            loc.search = "?" + loc.search;
+                        }
+                        $l.replace(loc.search.replace(regex, '') + loc.hash.replace(regex, ''));
+                        return true;
+                    }
+                    $l[attr] = $l[attr].replace(regex, '');
+                    if (attr == 'hash') {
+                        _invokeHashChange();
+                    }
                 } else {
                     $COMMIT[attr] = ($COMMIT[attr] || $l[attr]);
                     $COMMIT[attr] = $COMMIT[attr].replace(regex, '');
@@ -1911,37 +3040,39 @@ if (__thisIsNewer) {
         }
     }
     function $COMMIT(options) {
-        /*|  {info: "Commit changes using $GET, $SET, and $DEL with defer flag",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {options: "specify options for no history, etc"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#$COMMIT"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Commit changes using $GET, $SET, and $DEL with defer flag",
+            "category": "Global",
+            "featured": true,
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"options": "specify options for no history, etc"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#$COMMIT",
+            "returnType": "(void)"
+        }|*/
         try {
             options = options || {};
             var noHistory = options.noHistory || options == "noHistory" || options == "h";
             if ($COMMIT.update) {
                 if ($COMMIT.search) {
-                        if (noHistory) {
-                            $l.replace($COMMIT.search + ($COMMIT.hash || ""));
-                        } else {
-                    $l.href = $COMMIT.search + ($COMMIT.hash || "");
-                        }
-                } else if ($COMMIT.hash) {
-                        if (noHistory) {
-                            var hash = $COMMIT.hash[0] == '#' ? $COMMIT.hash : "#" + $COMMIT.hash
-                            $l.replace($COMMIT.hash);
-                        } else {
-                    $l.hash = $COMMIT.hash;
-                }
-                        $COOKIE("CRAYDENTHASH", $l.hash[0] == '#' ? $l.hash.substring(1) : $l.hash);
-                        _invokeHashChange();
+                    if (noHistory) {
+                        $l.replace($COMMIT.search + ($COMMIT.hash || ""));
+                    } else {
+                        $l.href = $COMMIT.search + ($COMMIT.hash || "");
                     }
+                } else if ($COMMIT.hash) {
+                    if (noHistory) {
+                        var hash = $COMMIT.hash[0] == '#' ? $COMMIT.hash : "#" + $COMMIT.hash;
+                        $l.replace($COMMIT.hash);
+                    } else {
+                        $l.hash = $COMMIT.hash;
+                    }
+                    $COOKIE("CRAYDENTHASH", $l.hash[0] == '#' ? $l.hash.substring(1) : $l.hash);
+                    _invokeHashChange();
+                }
                 $ROLLBACK();
             }
         } catch (e) {
@@ -1949,13 +3080,17 @@ if (__thisIsNewer) {
         }
     }
     function $ROLLBACK() {
-        /*|  {info: "Rollback deferred changes from $GET, $SET, $DEL",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#$ROLLBACK"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Rollback deferred changes from $GET, $SET, $DEL",
+            "category": "Global",
+            "featured": true,
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#$ROLLBACK",
+            "returnType": "(void)"
+        }|*/
         try {
             delete $COMMIT.update;
             delete $COMMIT.noHistory;
@@ -1967,14 +3102,19 @@ if (__thisIsNewer) {
         }
     }
     function cacheImages(imgs) {
-        /*|  {info: "Cache images in browser",
-         *    category: "Global",
-         *    parameters:[
-         *        {imgs: "(String[]) full or relative url to image"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#cacheImages"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Cache images in browser",
+            "category": "Global",
+            "parameters":[
+                {"imgs": "(String[]) full or relative urls to images"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"imgURL": "(String) full or relative url to image""}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#cacheImages",
+            "returnType": "(void)"
+        }|*/
         try {
             if ($c.isString(imgs)) {imgs = [imgs];}
             for (var i = 0, len = imgs.length; i < len; i++) {
@@ -1986,14 +3126,17 @@ if (__thisIsNewer) {
         }
     }
     function cout(){
-        /*|  {info: "Log to console when DEBUG_MODE is true and when the console is available",
-         *    category: "Global",
-         *    parameters:[
-         *        {infinite: "any number of arguments can be passed."}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#cout"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Log to console when DEBUG_MODE is true and when the console is available",
+            "category": "Global",
+            "parameters":[
+                {"infinite": "any number of arguments can be passed."}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#cout",
+            "returnType": "(void)"
+        }|*/
         try {
             if($c && $c.DEBUG_MODE && console && console.log){
                 for (var i = 0, len = arguments.length; i < len; i++) {
@@ -2005,70 +3148,96 @@ if (__thisIsNewer) {
         }
     }
     function cuid(msFormat) {
-        /*|  {info: "Creates a Craydent/Global Unique IDendifier",
-         *    category: "Global",
-         *    parameters:[
-         *        {msFormat: "(Bool) use microsoft format if true"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#cuid"},
-         *    returnType: "(String)"
-         * |*/
+        /*|{
+            "info": "Creates a Craydent/Global Unique Identifier",
+            "category": "Global",
+            "parameters":[
+                {"msFormat": "(Bool) use microsoft format if true"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#cuid",
+            "returnType": "(String)"
+        }|*/
         try {
             var pr = "", pt = "";
+            //noinspection CommaExpressionJS
             msFormat && (pr="{",pt="}");
-            return pr + 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'.replace(/[x]/g, function(c) {
-                var r = Math.random()*16|0;
-                return r.toString(16);
-            }) + pt;
+            return pr + 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    var r = Math.random()*16|0, v = c == 'x' ? r : (r&0x3|0x8);
+                    return v.toString(16);
+                }) + pt;
         } catch (e) {
             error('cuid', e);
         }
     }
     function error(fname, e) {
-        /*|  {info: "User implemented place holder function to handle errors",
-         *    category: "Global",
-         *    parameters:[
-         *        {fname: "(String) The function name the error was thrown"},
-         *        {e: "(Error) Exception object thrown"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#error"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "User implemented place holder function to handle errors",
+            "category": "Global",
+            "parameters":[
+                {"fname": "(String) The function name the error was thrown"},
+                {"e": "(Error) Exception object thrown"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#error",
+            "returnType": "(void)"
+        }|*/
         try {
             $c.DEBUG_MODE && cout("Error in " + fname + "\n" + (e.description || e), e);
         } catch (e) {
             cout("Error in " + fname + "\n" + (e.description || e));
         }
     }
-    function fillTemplate (htmlTemplate, objs, offset, max) {
-        /*|  {info: "Function for templating",
-         *    category: "Global",
-         *    parameters:[
-         *        {htmlTemplate: "(String) Template to be used"},
-         *        {objs: "(Objects[]) Objects to fill the template variables"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {htmlTemplate: "(String) Template to be used"},
-         *            {objs: "(Objects[]) Objects to fill the template variables"},
-         *            {offset: "(Int) The start index of the Object array"},
-         *            {max: "(Int) The maximum number of records to process"}]}
-         *        {parameters:[
-         *            {htmlTemplate: "(String) Template to be used"},
-         *            {objs: "(Objects[]) Objects to fill the template variables"},
-         *            {max: "(Int) The maximum number of records to process"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#fillTemplate"},
-         *    returnType: "(String)"
-         * |*/
+    function fillTemplate (htmlTemplate, objs, offset, max, bound) {
+        /*|{
+            "info": "Function for templetizing",
+            "category": "Global",
+            "featured": true,
+            "parameters":[
+                {htmlTemplate: "(String) Template to be used"},
+                {objs: "(Objects[]) Objects to fill the template variables"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"htmlTemplate": "(String) Template to be used"},
+                    {"objs": "(Objects[]) Objects to fill the template variables"},
+                    {"max": "(Int) The maximum number of records to process"}]},
+                {"parameters":[
+                    {"htmlTemplate": "(String) Template to be used"},
+                    {"objs": "(Objects[]) Objects to fill the template variables"},
+                    {"offset": "(Int) The start index of the Object array"},
+                    {"max": "(Int) The maximum number of records to process"}]},
+                {"parameters":[
+                    {"htmlTemplate": "(String) Template to be used"},
+                    {"objs": "(Objects[]) Objects to fill the template variables"},
+                    {"offset": "(Int) The start index of the Object array"},
+                    {"max": "(Int) The maximum number of records to process"},
+                    {"bound": "(Boolean) Flag to automatically bind the object to the rendered DOM"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#fillTemplate",
+            "returnType": "(String)"
+        }|*/
         try {
-            if (offset !== undefined && max == undefined) {
+            var nested = true;
+            if (!fillTemplate.binding && !fillTemplate.declared && !fillTemplate.refs) {
+                nested = false;
+                fillTemplate.binding = {original:[],replacer:[]};
+                fillTemplate.declared = {};
+                fillTemplate.refs = [];
+            }
+            if (!htmlTemplate) { return ""; }
+            if ($c.isBoolean(offset)) {
+                bound = offset;
+                max = offset = 0;
+            } else if (!isNull(offset) && isNull(max)) {
                 max = offset;
                 offset = 0;
             }
 
-            htmlTemplate = (htmlTemplate || "").replace(/\{\{(?!\{)(.*?)\}\}/g,'${$1}');
-            $c.isDomElement(htmlTemplate) && (htmlTemplate = htmlTemplate.toString());
+            var domRef;
+            $c.isDomElement(htmlTemplate) && (domRef = htmlTemplate, htmlTemplate = htmlTemplate.toString());
             if (htmlTemplate.trim() == "") {
                 return "";
             }
@@ -2083,49 +3252,112 @@ if (__thisIsNewer) {
             if (!$c.isArray(objs)) {
                 objs = [objs];
             }
-            var html = "",
-                variable,
-                value,
-                hasDataProps = htmlTemplate.contains('${dataproperties}');
-            for (var j = 0, jlen = $c.TEMPLATE_VARS.length; j < jlen; j++) {
-                variable = $c.TEMPLATE_VARS[j].variable;
-                value = $c.TEMPLATE_VARS[j].value;
+            var html = "", variable, value, ttc = $c.TEMPLATE_TAG_CONFIG, tv = $c.TEMPLATE_VARS,
+                hasDataProps = htmlTemplate.contains('${dataproperties}'),
+                vsyntax = ttc.VARIABLE,
+                vnsyntax = ttc.VARIABLE_NAME,
+                declarations = htmlTemplate.match(ttc.DECLARE.syntax.addFlags('g')) || [];
+            for (var j = 0, jlen = tv.length; j < jlen; j++) {
+                variable = tv[j].variable;
+                value = tv[j].value;
                 if (!variable) {continue;}
-                value = $c.isFunction(value) ? value(obj,i):value;
+                value = $c.isFunction(value) ? value(variable,j):value;
                 htmlTemplate = htmlTemplate.replace_all("${"+variable+"}", value);
             }
+            for (var j = 0, jlen = declarations.length; j < jlen; j++) {
+                htmlTemplate = ttc.DECLARE.parser(htmlTemplate, declarations[j]);
+            }
+
             max = max || objs.length;
             offset = offset || 0;
 
-//            var props = (htmlTemplate.match(/\$\{.*?\}/g) || []).condense(true);
-            var props = (htmlTemplate.match(/\$\{(?!\$).*?\}/g) || []).condense(true);
+            var props = (htmlTemplate.match(vsyntax) || []).condense(true);
+            // prep template to allow binding
+            if (bound) {
+                var nodes = htmlTemplate.toDomElement();
+                function __setBindAttribute(n,value,id) {
+                    var prop, k = 0;
+                    while (prop = props[k++]) {
+                        if (value.contains(prop)) {
+                            var ca = n.getAttribute("data-craydent-bind") || "",
+                                property = $c.isFunction(vnsyntax) ? vnsyntax(prop) : vnsyntax.exec && vnsyntax.exec(prop);
+                            !ca.contains("${craydent_bind}." + property) &&
+                            n.setAttribute("data-craydent-bind", (ca ? ca + "," : id+":") + "${craydent_bind}." + property);
+                        }
+                    }
+                }
+                function __processNodes(n) {
+                    var id = suid();
+                    for (var i = 0, len = n.attributes.length; i < len; i++) {
+                        __setBindAttribute(n,n.attributes[i].value,id);
+                    }
+                    var child, j = 0;
+                    while (child = n.childNodes[j++]) {
+                        if (child.nodeType == 3) { // is text node
+                            __setBindAttribute(n,child.nodeValue,id);
+                        } else {
+                            __processNodes(child);
+                        }
+                    }
+                    fillTemplate._micro_templates[id] = {template:n.toString()};
 
+                }
+                if (!nodes.length) { nodes = [nodes]; }
+                var node, i = 0;
+                while (node = nodes[i++]) {
+                    __processNodes(node);
+                }
+                htmlTemplate = "";
+                i = 0;
+                while (node = nodes[i++]) {
+                    htmlTemplate += node.toString();
+                }
+            }
+            var bindTemplate = {html: htmlTemplate}, _observing = fillTemplate._observing;
 
             for (var i = offset; i < max; i++) {
-                var obj = objs[i], regex, template = htmlTemplate;
-//                if (!$c.isObject(obj)) {
-//                    continue;
-//                }
+                var obj = objs[i], regex, template = htmlTemplate, match, bind = "";
+
+                if (bound) {
+                    $c.observe(obj);
+                    bind = _observing["hash_"+_observing.indexOf(obj)];
+                    _observing[bind] = {item:obj,template:bindTemplate};
+                    template = template.replace_all("${craydent_bind}", bind);
+                }
 
                 if (template.contains("${this}")) {
-                    template = template.replace_all(["${this}","${index}"],[parseRaw(obj, true).replace_all([';','[',']'], [';\\','\\[','\\]']),i]);
+                    var uid = __add_fillTemplate_ref(obj);
+                    //template = template.replace_all(["${this}","${index}"],[parseRaw(obj, true).replace_all([';','[',']'], [';\\','\\[','\\]']),i]);
+                    template = template.replace_all(["${this}","${index}"],["fillTemplate.refs['" + uid + "']",i]);
                 }
 
 
                 while (template.contains("${this.") && (match=/\$\{this\.(.+?)\}/.exec(template))) {
-                    value = parseRaw($c.getProperty(obj, match[1]), true);
+                    value = $c.getProperty(obj, match[1]);
+                    if (typeof value == "object") {
+                        value = "fillTemplate.refs['" + __add_fillTemplate_ref(value) + "']";
+                    } else {
+                        value = parseRaw(value, $c.isString(value));
+                    }
+                    //value = parseRaw($c.getProperty(obj, match[1]), true);
+
+                    //template= template.replace_all("${this."+match[1]+"}", value);
                     template= template.replace_all("${this."+match[1]+"}", value);
                 }
                 var objval;
-                //                    for (var property in obj) {
                 for (var j = 0, jlen = props.length; j < jlen; j++) {
-                    var property = props[j].slice(2,-1);
-                    if (!obj.hasOwnProperty(property)) {
-                        continue;
-                    }
-                    var expression = "${"+property+"}";
-                    if (template.contains(expression) && (objval = $c.getProperty(obj,property,null,{noInheritance:true})) /*&& (objval = obj[property])*/) {
-                        objval = parseRaw(objval, $c.isString(objval)).replace_all(['\n',';','[',']'],['<br />',';\\','\\[','\\]']);
+                    var property = $c.isFunction(vnsyntax) ? vnsyntax(props[j]) : vnsyntax.exec && vnsyntax.exec(props[j]);
+                    if (!obj.hasOwnProperty(property)) { continue; }
+                    var expression = props[j];
+                    if (template.contains(expression) && !isNull(objval = $c.getProperty(obj,property,null,{noInheritance:true}))) {
+                        //objval = parseRaw(objval, $c.isString(objval)).replace_all(['\n',';','[',']'],['<br />',';\\','\\[','\\]']);
+                        if (typeof objval == "object") {
+                            objval = "fillTemplate.refs['" + __add_fillTemplate_ref(objval) + "']";
+                        } else {
+                            objval = parseRaw(objval, $c.isString(objval));
+                        }
+                        //objval = parseRaw(objval, $c.isString(objval)).replace_all(['\n',';'],['<br />',';\\']);
+                        objval = objval.replace_all(['\n',';'],['<br />',';\\']);
                         if (objval.contains('${')) {
                             objval = fillTemplate(objval,[obj]);
                         }
@@ -2141,7 +3373,7 @@ if (__thisIsNewer) {
                 template = template.contains("${COUNT") ? template.replace(/\$\{COUNT\[(.*?)\]\}/g, '${RUN[__count;$1]}') : template;
                 template = template.contains("${ENUM") ? template.replace(/\$\{ENUM\[(.*?)\]\}/g, '${RUN[__enum;$1]}') : template;
                 template = template.contains("${RUN") ? __run_replace(/\$\{RUN\[(.+?)\]\}/, template, true, obj) : template;
-                template = template.contains("${") ? template.replace(/(\$\{[a-zA-Z$_-]*\})/g, '') : template;
+                //template = template.contains("${") ? template.replace(/(\$\{[a-zA-Z$_-]*\})/g, '') : template;
                 var tmp, rptmp;
                 if (template.contains('||') && (tmp = /\$\{(.+?\|\|?.+?)\}/.exec(template)) && tmp[1]) {
                     tmp = tmp[1].strip('|').replace(/\|{3,}/,'');
@@ -2156,34 +3388,55 @@ if (__thisIsNewer) {
                     rptmp = (tmp && "__and|"+tmp.replace_all('&&', "|") || "");
                     template = template.replace_all(tmp, rptmp);
                 }
-                template = template.contains('|') ? __run_replace (/\$\{(.+?(\|?.+?)+)\}/, template, false,obj) : template;
-                template = template.contains('${') ? template.replace(/\$\{.*?\}/g,"") : template;
-                html += template.replace_all(['${dataproperties}',';\\'], ["", ';']);
+                var leftovervars = template.match(vsyntax);
+                if (leftovervars) {
+                    for (var k = 0, klen = leftovervars.length; k < klen; k++) {
+                        var variable = leftovervars[k];
+                        if (variable.contains('|')) {
+                            var regex = new RegExp(variable.replace_all(['$','{','}','|'],['\\$','\\{(',')\\}','\\|']));
+                            template = __run_replace (regex, template, false,obj);
+                        }
+                    }
+                }
+
+                template = __logic_parser(template, obj, bind);
+                html += (template.contains(vsyntax) ? template.replace(vsyntax,"") : template).replace_all(';\\', ';');
             }
 
+            if (domRef) {
+                domRef.parentNode.replaceChild(html.toDomElement(),domRef);
+            }
+            html = html.replace_all(fillTemplate.binding.original, fillTemplate.binding.replacer);
+            if (!nested) {
+                fillTemplate.binding = fillTemplate.declared = fillTemplate.refs = undefined;
+            }
             return html;
         } catch (e) {
             error('fillTemplate', e);
         }
     }
     function foo () {
-        /*|  {info: "Place holder function for a blank function",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#foo"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Place holder function for a blank function",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#foo",
+            "returnType": "(void)"
+        }|*/
     }
     function getUniqueId(prefix) {
-        /*|  {info: "Create a unique id not used yet in the DOM",
-         *    category: "Global",
-         *    parameters:[
-         *        {prefix: "(String) ID prefix to use"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#getUniqueId"},
-         *    returnType: "(String)"
-         * |*/
+        /*|{
+            "info": "Create a unique id not used yet in the DOM",
+            "category": "Global",
+            "parameters":[
+                {"prefix": "(String) ID prefix to use"}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#getUniqueId",
+            "returnType": "(String)"
+        }|*/
         try {
             var index = "";
             prefix = prefix || "";
@@ -2200,23 +3453,24 @@ if (__thisIsNewer) {
         }
     }
     function killPropagation(ev, bubble, returnValue) {
-        /*|  {info: "Used to cancel any bubbling and propagation",
-         *    category: "Global",
-         *    parameters:[
-         *        {ev: "(Event) Event object tied to the event trigger"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {ev: "(Event) Event object tied to the event trigger"},
-         *            {bubble: "(Bool) Whether or not to cancel bubbling up"}]},
-         *        {parameters:[
-         *            {ev: "(Event) Event object tied to the event trigger"},
-         *            {bubble: "(Bool) Whether or not to cancel bubbling up"},
-         *            {returnValue: "(Bool) return value when propagating"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#killPropagation"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Used to cancel any bubbling and propagation",
+            "category": "Global",
+            "parameters":[
+                {"ev": "(Event) Event object tied to the event trigger"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"ev": "(Event) Event object tied to the event trigger"},
+                    {"bubble": "(Bool) Whether or not to cancel bubbling up"}]},
+                {"parameters":[
+                    {"ev": "(Event) Event object tied to the event trigger"},
+                    {"bubble": "(Bool) Whether or not to cancel bubbling up"},
+                    {"returnValue": "(Bool) return value when propagating"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#killPropagation",
+            "returnType": "(void)"
+        }|*/
         try {
             ev = ev || $w.event;
             if (!ev) {return false;}
@@ -2236,14 +3490,17 @@ if (__thisIsNewer) {
         }
     }
     function logit(){
-        /*|  {info: "Log to console when DEBUG_MODE is true and when the console is available",
-         *    category: "Global",
-         *    parameters:[
-         *        {infinite: "any number of arguments can be passed."}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#logit"},
-         *    returnType: "(void)"
-         * |*/
+        /*|{
+            "info": "Log to console when DEBUG_MODE is true and when the console is available",
+            "category": "Global",
+            "parameters":[
+                {"infinite": "any number of arguments can be passed."}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#logit",
+            "returnType": "(void)"
+        }|*/
         try {
             var location = "", err = new Error(), args = [];
 
@@ -2260,31 +3517,181 @@ if (__thisIsNewer) {
             error('logit', e);
         }
     }
+    function namespace (name, clazz, fn) {
+        /*|{
+            "info": "Adds the class to a namespace instead of the global space",
+            "category": "Global",
+            "parameters":[
+                {"name":"(String) Name of the namespace to add to."},
+                {"clazz":"(Class) Class to add to the given namespace"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"name":"(String) Name of the namespace to add to."},
+                    {"clazz":"(Class) Class to add to the given namespace"},
+                    {"fn":"(Function) Method to call after the class has been added to the namespace"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#namespace",
+            "returnType":"(void)"
+        }|*/
+        try {
+            var className = clazz.getName();
+            $w[className] = namespace[className] || clazz;
+            $w.setProperty(name + "." + className, clazz);
+            fn && fn.call(clazz);
+        } catch (e) {
+            error('namespace', e);
+        }
+    }
     function now (format) {
-        /*|  {info: "Get the DateTime of now",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {format: "(String) Format syntax to return formatted string of now"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#now"},
-         *    returnType:"(Mixed)"
-         * |*/
-         try {
+        /*|{
+            "info": "Get the DateTime of now",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"format": "(String) Format syntax to return formatted string of now"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#now",
+            "returnType":"(Mixed)"
+        }|*/
+        try {
             return format ? (new Date()).format(format) : new Date();
-        } catch (e) { }
+        } catch (e) { error('now', e); }
+    }
+    function observe(objs, callback, acceptList, parent){
+        /*|{
+            "info": "Track and trigger events when the object(s) change",
+            "category": "Global",
+            "featured": true,
+            "parameters":[
+                {"obj": "(Object) Object to track changes"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"objs": "(Object[]) Objects to track changes"}]},
+                {"parameters":[
+                    {"obj": "(Object) Object to track changes"},
+                    {"callback": "(Function) Method to call when the object changes"}]},
+                {"parameters":[
+                    {"objs": "(Object[]) Objects to track changes"},
+                    {"callback": "(Function) Method to call when the object changes"}]},
+                {"parameters":[
+                    {"obj": "(Object) Object to track changes"},
+                    {"callback": "(Function) Method to call when the object changes"},
+                    {"acceptList": "(String[]) List of events to listen on"}]},
+                {"parameters":[
+                    {"objs": "(Object[]) Objects to track changes"},
+                    {"callback": "(Function) Method to call when the object changes"},
+                    {"acceptList": "(String[]) List of events to listen on"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#observe",
+            "returnType": "(void)"
+        }|*/
+        try {
+            if (!$c.isArray(objs)) { objs = [objs]; }
+            var i = 0,obj,
+                _observing = fillTemplate._observing,
+                _observing_previous = fillTemplate._observing_previous,
+                _observing_poll = fillTemplate._observing_poll,
+                index = _observing.length;
+            callback = callback || foo;
+            acceptList = acceptList || ["add", "update", "delete", "reconfigure", "setPrototype", "preventExtensions"];
+            if (parent) {
+                _observing["parents_" + index] = _observing["parents_" + index] || [];
+                _observing["parents_" + index].push(parent);
+            }
+
+            if ($w["_$observer_overwrite"]) {
+                while (obj = objs[i++]) {
+                    if (_observing.contains(obj)) { continue; }
+                    _observing["hash_" + index] = suid();
+                    _observing.push(obj);
+                    $w["_$observer_overwrite"].call(Object, obj, function(changes){
+                        __on_observable_change(changes);
+                        callback(changes);
+                    }, acceptList);
+                    $c.eachProperty(obj, function (value) {
+                        __observe_helper(value, callback, acceptList, obj);
+                    });
+                }
+                return;
+            }
+
+            if (!_observing_poll) {
+                function __observe_delta(){
+                    __clean_micro_templates();
+                    if (_observing.length) {
+                        var options = ["add", "delete"];
+                        if (!Object.defineProperty) { options.push("update"); }
+                        for (var j = 0, jlen = _observing.length; j < jlen; j++) {
+                            var obj = _observing[j],
+                                old = _observing_previous[j],
+                                analyses = $c.changes(old, obj);
+                            for (var k = 0, option = options[k++]; option; option = options[k++]) {
+                                var diff = 0, prop;
+                                while (prop = analyses["$"+option][diff++]) {
+                                    var changes = {name:prop,object:obj,type:option};
+                                    if (option != "add") { changes.oldValue = old[prop]; }
+                                    __on_observable_change([changes]);
+                                    acceptList.contains(option) && callback.call(obj,[changes]);
+                                }
+                            }
+                            _observing_previous[j] = $c.duplicate(obj);
+                        }
+                        _observing_poll = setTimeout(__observe_delta,$c.OBSERVE_CHECK_INTERVAL);
+                    }
+                }
+                _observing_poll = setTimeout(__observe_delta,$c.OBSERVE_CHECK_INTERVAL);
+            }
+            while (obj = objs[i++]){
+                if (_observing.contains(obj)) { continue; }
+                _observing["hash_" + _observing.length] = suid();
+                _observing.push(obj);
+
+                //for (var prop in obj) {
+                $c.eachProperty(obj, function (value, prop) {
+                    if (!value) { return; }
+                    if (Object.defineProperty) {
+                        if (value.constructor == Function) { value = obj[prop] = (obj[prop]).bind(obj);}
+                        Object.defineProperty(obj,"_"+prop,{
+                            enumerable:false,
+                            writable:true,
+                            value:value
+                        });
+                        obj.__defineGetter__(prop, eval("(function(){ return $c.getValue(this._"+prop+"); })"));
+                        obj.__defineSetter__(prop,eval("("+
+                            "function(val){"+
+                            "if (val.constructor == Function) { val = (val).bind(this); }"+
+                            "var oldVal = this['"+prop+"'];"+
+                            "this._"+prop+"=val;"+
+                            "var changes = [{name:'"+prop+"',object:this,type:'update',oldVal:oldVal}];"+
+                            "__on_observable_change(changes);"+
+                            "acceptList.contains('update') && callback.call(changes);"+
+                            "return val;"+
+                            "})"));
+                    }
+                    __observe_helper(value, callback, acceptList, obj);
+                });
+                _observing_previous.push($c.duplicate(obj));
+            }
+        } catch (e) {
+            error('observe', e);
+        }
     }
     function parseBoolean(value) {
-        /*|  {info: "Try to parse value to a Boolean",
-         *    category: "Global",
-         *    parameters:[
-         *        {value: ""}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#parseBoolean"},
-         *    returnType: “(Mixed)”
-         * |*/
+        /*|{
+            "info: "Try to parse value to a Boolean",
+            "category": "Global",
+            "parameters":[
+                {"value": "(Mixed) value to parse as boolean"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#parseBoolean",
+            "returnType": "(Mixed)"
+        }|*/
         try {
             if ($c.isString(value)) {
                 value = value.toLowerCase();
@@ -2300,22 +3707,23 @@ if (__thisIsNewer) {
         }
     }
     function parseRaw(value, skipQuotes, saveCircular, __windowVars, __windowVarNames) {
-        /*|  {info: "Creates an evaluable string",
-         *    category: "Global",
-         *    parameters:[
-         *        {value: "value to parse"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {value: "(Mixed) Value to parse"},
-         *            {skipQuotes: "(Bool) Flag to skip quotes for strings"},
-         *            {saveCircular: "(Bool) Flag to save circular references"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#parseRaw"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "Creates an evaluable string",
+            "category": "Global",
+            "parameters":[
+                {"value": "value to parse"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"value": "(Mixed) Value to parse"},
+                    {"skipQuotes": "(Bool) Flag to skip quotes for strings"},
+                    {"saveCircular": "(Bool) Flag to save circular references"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#parseRaw",
+            "returnType": "(String)"
+        }|*/
         try {
-            if (value === null || value === undefined) {
+            if (isNull(value)) {
                 return value + "";
             }
             var raw = "";
@@ -2327,6 +3735,8 @@ if (__thisIsNewer) {
                     tmp[i] = parseRaw(value[i], skipQuotes, saveCircular, __windowVars, __windowVarNames);
                 }
                 raw = "[" + tmp.join(',') + "]";
+            } else if ($c.isDate(value)) {
+                return "new Date('"+value.toString()+"')";
             } else if (value instanceof Object && !$c.isFunction(value)) {
                 if (!__windowVars) {
                     __windowVars = [];
@@ -2347,7 +3757,7 @@ if (__thisIsNewer) {
                 if (index == -1) {
                     if (saveCircular) {
                         __windowVars.push(value);
-                        __windowVarNames.push(cuid());
+                        __windowVarNames.push(suid());
                     }
                     raw = "{";
                     for (var prop in value) {
@@ -2372,21 +3782,22 @@ if (__thisIsNewer) {
         }
     }
     function rand(num1, num2, inclusive) {
-        /*|  {info: "Create a random number between two numbers",
-         *    category: "Global",
-         *    parameters:[
-         *        {num1: "(Number) Lower bound"},
-         *        {num2: "(Number) Upper bound"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {num1: "(Number) Lower bound"},
-         *            {num2: "(Number) Upper bound"},
-         *            {inclusive: "(Bool) Flag to include the given numbers"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#rand"},
-         *    returnType: “()”
-         * |*/
+        /*|{
+            "info": "Create a random number between two numbers",
+            "category": "Global",
+            "parameters":[
+                {"num1": "(Number) Lower bound"},
+                {"num2": "(Number) Upper bound"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"num1": "(Number) Lower bound"},
+                    {"num2": "(Number) Upper bound"},
+                    {"inclusive": "(Bool) Flag to include the given numbers"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#rand",
+            "returnType": "(Number)"
+        }|*/
         try {
             if (inclusive) {
                 if (num1 < num2) {
@@ -2402,35 +3813,70 @@ if (__thisIsNewer) {
             error('rand', e);
         }
     }
-    function tryEval(expression) {
-        /*|  {info: "Evaluates an expression without throwing an error",
-         *    category: "Global",
-         *    parameters:[
-         *        {expression: "(Mixed) Expression to evaluate"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#tryEval"},
-         *    returnType: “(Mixed)”
-         * |*/
+    function suid(length) {
+        /*|{
+            "info": "Creates a short Craydent/Global Unique Identifier",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"length": ("Integer) Custom length of the short unique identifier"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#suid",
+            "returnType": "(String)"
+        }|*/
         try {
-            return eval(expression);
+            //noinspection CommaExpressionJS
+            length = length || 10;
+            var chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", id = "";
+            while (id.length < length) {
+                id += chars[parseInt(rand(0,62))];
+            }
+
+            return id;
+        } catch (e) {
+            error('suid', e);
+        }
+    }
+    function tryEval(expression, evaluator) {
+        /*|{
+            "info": "Evaluates an expression without throwing an error",
+            "category": "Global",
+            "parameters":[
+                {"expression": "(Mixed) Expression to evaluate"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"expression": "(Mixed) Expression to evaluate"},
+                    {"evaluator": "(Function) Method to use to evaluate the expression"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#tryEval",
+            "returnType": "(Mixed)"
+        }|*/
+        try {
+            return (evaluator || eval)(expression);
         } catch(e) {
             try {
                 return eval("("+expression+")");
             } catch(e) {
-                return undefined;
+                return null;
             }
         }
     }
     /*timing functions*/
-    function wait(condition) {
-        /*|  {info: "Stops execution until the condition is satisfied",
-         *    category: "Global",
-         *    parameters:[
-         *        {condition: "(Mixed) Condition equivalent to js true to resume execution"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#wait"},
-         *    returnType: “()”
-         * |*/
+    function wait(condition) { // TODO: allow for nested wait calls
+        /*|{
+            "info": "Stops execution until the condition is satisfied",
+            "category": "Global",
+            "parameters":[
+                {"condition": "(Mixed) Condition equivalent to js true to resume execution"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#wait",
+            "returnType": "(void)"
+        }|*/
         try {
             var args = arguments.callee.caller.arguments,
                 funcOriginal = arguments.callee.caller.toString().
@@ -2483,7 +3929,7 @@ if (__thisIsNewer) {
                     } else {
                         setTimeout(delayFunc, 1);
                     }
-                }
+                };
                 setTimeout(delayFunc, 1);
             }
         } catch (e) {
@@ -2491,19 +3937,20 @@ if (__thisIsNewer) {
         }
     }
     function xmlToJson(xml, ignoreAttributes) {
-        /*|  {info: "Converts XML to JSON",
-         *    category: "Global",
-         *    parameters:[
-         *        {xml: "(Mixed) XML string or XML DOM"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {xml: "(Mixed) XML string or XML DOM"},
-         *            {ignoreAttributes: "(Bool) Flag to ignore attributes"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#xmlToJson"},
-         *    returnType: “(Object)”
-         * |*/
+        /*|{
+            "info": "Converts XML to JSON",
+            "category": "Global",
+            "parameters":[
+                {"xml": "(Mixed) XML string or XML DOM"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"xml": "(Mixed) XML string or XML DOM"},
+                    {"ignoreAttributes": "(Bool) Flag to ignore attributes"}]}],
+
+         "description": "http://www.craydent.com/library/1.8.0/docs#xmlToJson",
+         "returnType": "(Object)"
+        }|*/
         try {
             // Create the return object
             var obj = {};
@@ -2559,19 +4006,21 @@ if (__thisIsNewer) {
         }
     }
     function zipit(files, content/*=NULL*/) {
-        /*|  {info: "Download a zip of files from file contents",
-         *    category: "Global",
-         *    parameters:[
-         *        {files: "(Object[]) Objects containing properties name for file name and content for file content"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {files: "(String) Name of the file"},
-         *            {content: "(String) contents of the file"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#zipit"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "Download a zip of files from file contents",
+            "category": "Global",
+            "featured": true,
+            "parameters":[
+                {"files": "(Object[]) Objects containing properties name for file name and content for file content"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"files": "(String) Name of the file"},
+                    {"content": "(String) contents of the file"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#zipit",
+            "returnType": "(void)"
+        }|*/
         try {
             files = (content && $c.isString(files) && [{
                 name:files,
@@ -2597,46 +4046,57 @@ if (__thisIsNewer) {
     }
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Browser helper operations
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	Browser helper operations
+     /---------------------------------------------------------------------------------------------------------------*/
     function ChromeVersion (){
-        /*|  {info: "Get Chrome version",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#ChromeVersion"},
-         *    returnType: “(Float)”
-         * |*/
+        /*|{
+            "info": "Get Chrome version",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#ChromeVersion",
+            "returnType": "(Float)"
+        }|*/
         try {
-            var browser = "Chrome"
-            return _getBrowserVersion(browser);
+            return _getBrowserVersion("Chrome");
         } catch(e){
             error('ChromeVersion', e);
         }
     }
     function FirefoxVersion (){
-        /*|  {info: "Get Firefox version",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#FirefoxVersion"},
-         *    returnType: “(Float)”
-         * |*/
+        /*|{
+            "info": "Get Firefox version",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#FirefoxVersion",
+            "returnType": "(Float)"
+        }|*/
         try {
-            var browser = "Firefox"
-            return _getBrowserVersion(browser);
+            return _getBrowserVersion("Firefox");
         } catch(e){
             error('FirefoxVersion', e);
         }
     }
+
+    /**
+     * @return {number}
+     */
     function IEVersion () {
-        /*|  {info: "Get Internet Explorer version",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#IEVersion"},
-         *    returnType: “(Float)”
-         * |*/
+        /*|{
+            "info": "Get Internet Explorer version",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#IEVersion",
+            "returnType": "(Float)"
+        }|*/
         try {
             var rv = -1;
             if (navigator.appName == 'Microsoft Internet Explorer') {
@@ -2652,135 +4112,157 @@ if (__thisIsNewer) {
         }
     }
     function OperaVersion (){
-        /*|  {info: "Get Opera version",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#OperaVersion"},
-         *    returnType: “(Float)”
-         * |*/
+        /*|{
+            "info": "Get Opera version",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#OperaVersion",
+            "returnType": "(Float)"
+        }|*/
         try {
-            var browser = "Opera"
-            return _getBrowserVersion(browser);
+            return _getBrowserVersion("Opera");
         } catch(e){
             error('OperaVersion', e);
         }
     }
     function SafariVersion (){
-        /*|  {info: "Get Safari version",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#SafariVersion"},
-         *    returnType: “(Float)”
-         * |*/
+        /*|{
+            "info": "Get Safari version",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#SafariVersion",
+            "returnType": "(Float)"
+        }|*/
         try {
-            var browser = "Safari"
-            return _getBrowserVersion(browser);
+            return _getBrowserVersion("Safari");
         } catch(e){
             error('SafariVersion', e);
         }
     }
 
     function isAmaya() {
-        /*|  {info: "Check if browser is Amaya",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isAmaya"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if browser is Amaya",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isAmaya",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/amaya/i.test(navUserAgent));
+            return (/amaya/i.test(navigator.userAgent));
         } catch (e) {
             error('isAmaya', e);
         }
     }
     function isAndroid(){
-        /*|  {info: "Check if device is Android",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isAndroid"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if device is Android",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isAndroid",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/android/i.test(navUserAgent));
+            return (/android/i.test(navigator.userAgent));
         } catch (e) {
             error('isAndroid', e);
         }
     }
     function isBlackBerry() {
-        /*|  {info: "Check if device is BlackBerry",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isBlackBerry"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if device is BlackBerry",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isBlackBerry",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/blackberry/i.test(navUserAgent));
+            return (/blackberry/i.test(navigator.userAgent));
         } catch (e) {
             error('isBlackBerry', e);
         }
     }
     function isChrome(){
-        /*|  {info: "Check if browser is Chrome",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isChrome"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if browser is Chrome",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isChrome",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            return (navigator.userAgent.contains("Chrome"));
+            return (/chrome/i.test(navigator.userAgent));
         } catch(e){
             error('isChrome', e);
         }
     }
     function isFirefox(){
-        /*|  {info: "Check if browser is Firefox",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isFirefox"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if browser is Firefox",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isFirefox",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            return (!navigator.userAgent.contains("Chrome"))
-            && (!navigator.userAgent.contains("Apple"))
-            && (!navigator.userAgent.contains("Opera"))
-            && (navigator.userAgent.contains("Firefox"));
+            var nu = navigator.userAgent;
+            return (!/chrome/i.test(nu)
+                && !/apple/i.test(nu)
+                && !/opera/i.test(nu)
+                && /firefox/i.test(nu));
         } catch(e){
             error('isFirefox', e);
         }
     }
     function isGecko() {
-        /*|  {info: "Check if engine is Gecko",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isGecko"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if engine is Gecko",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+             "description": "http://www.craydent.com/library/1.8.0/docs#isGecko",
+             "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/gecko/i.test(navUserAgent));
+            return (/gecko/i.test(navigator.userAgent));
         } catch (e) {
             error('isGecko', e);
         }
     }
     function isIE6() {
-        /*|  {info: "Check if browser is Internet Explorer 6",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isIE6"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if browser is Internet Explorer 6",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isIE6",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var rv = IEVersion();
             return (rv != -1 && rv < 7.0);
@@ -2789,13 +4271,16 @@ if (__thisIsNewer) {
         }
     }
     function isIE() {
-        /*|  {info: "Check if browser is Internet Explorer",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isIE"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if browser is Internet Explorer",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isIE",
+            "returnType": "(Bool)"
+        }|*/
         try {
             return (IEVersion() != -1);
         } catch (e) {
@@ -2803,100 +4288,118 @@ if (__thisIsNewer) {
         }
     }
     function isIPad() {
-        /*|  {info: "Check if device is iPad",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isIPad"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if device is iPad",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isIPad",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/iPad|iPhone OS 3_[1|2]_2/i.test(navUserAgent));
+            return (/iPad|iPhone OS 3_[1|2]_2/i.test(navigator.userAgent));
         } catch (e) {
             error('isIPad', e);
         }
     }
     function isIPhone(){
-        /*|  {info: "Check if device is IPhone",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isIphone"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if device is IPhone",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isIphone",
+            "returnType": "(Bool)"
+        }|*/
         try{
-            return !isIPad() && navigator.userAgent.contains("iPhone");
+            return !isIPad() && /iphone/i.test(navigator.userAgent);
         } catch (e) {
             error('isIPhone', e);
         }
     }
     function isIPod() {
-        /*|  {info: "Check if device is IPod",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isIPod"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if device is IPod",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isIPod",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/ipod/i.test(navUserAgent));
+            return (/ipod/i.test(navigator.userAgent));
         } catch (e) {
             error('isIPod', e);
         }
     }
     function isKHTML() {
-        /*|  {info: "Check if engine is KHTML",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isKHTML"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if engine is KHTML",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isKHTML",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/khtml/i.test(navUserAgent));
+            return (/khtml/i.test(navigator.userAgent));
         } catch (e) {
             error('isKHTML', e);
         }
     }
     function isLinux(){
-        /*|  {info: "Check if OS is Linux",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isLinux"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if OS is Linux",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isLinux",
+            "returnType": "(Bool)"
+        }|*/
         try{
-            return navigator.platform.contains("Linux");
+            return /linux/i.test(navigator.platform);
         } catch (e) {
             error('isLinux', e);
         }
     }
     function isMac(){
-        /*|  {info: "Check if OS is Mac Based",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isMac"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if OS is Mac Based",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isMac",
+            "returnType": "(Bool)"
+        }|*/
         try{
-            return navigator.platform.contains("Mac");
+            return /mac/i.test(navigator.platform);
         } catch (e) {
             error('isMac', e);
         }
     }
     function isMobile(){
-        /*|  {info: "Check if the device is a Mobile device",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isMobile"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if the device is a Mobile device",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isMobile",
+            "returnType": "(Bool)"
+        }|*/
         try{
             return isAndroid() || isBlackBerry() || isIPad() || isIPhone() || isIPod() || isPalmOS() || isSymbian() || isWindowsMobile();
         } catch (e) {
@@ -2904,345 +4407,906 @@ if (__thisIsNewer) {
         }
     }
     function isNull(value, defaultValue) {
-        /*|  {info: "Check if a value is Null",
-         *    category: "Global",
-         *    parameters:[
-         *        {value: "(Mixed) Value to check"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {value: "(Mixed) Value to check"},
-         *            {defaultValue: "(Mixed) Value to return if null"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isNull"},
-         *    returnType: “()”
-         * |*/
-        try {
-            var isnull = value == null || value == undefined;
-            if (defaultValue == null || defaultValue == undefined) {
-                return isnull;
-            }
-            return isnull ? defaultValue : value;
-        } catch (e) {
-            error("isNull", e);
+        /*|{
+            "info": "Check if a value is Null",
+            "category": "Global",
+            "parameters":[
+                {"value": "(Mixed) Value to check"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"value": "(Mixed) Value to check"},
+                    {"defaultValue": "(Mixed) Value to return if null"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isNull",
+            "returnType": "()"
+        }|*/
+        var isnull = value == null || value == undefined;
+        if (defaultValue == null || defaultValue == undefined) {
+            return isnull;
         }
+        return isnull ? defaultValue : value;
     }
     function isOpera(){
-        /*|  {info: "Check if browser is Opera",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isOpera"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if browser is Opera",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isOpera",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            return (navigator.userAgent.indexOf("Chrome") == -1)
-            && (navigator.userAgent.indexOf("Apple") == -1)
-            && (navigator.userAgent.indexOf("Opera") != -1);
+            var nu = navigator.userAgent;
+            return /chrome/i.test(nu)
+                && /apple/i.test(nu)
+                && /opera/i.test(nu);
         } catch(e){
             error('isOpera', e);
         }
     }
     function isPalmOS(){
-        /*|  {info: "Check if OS is PalmOS",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isPalmOS"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if OS is PalmOS",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isPalmOS",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/palm/i.test(navUserAgent));
+            return (/palm/i.test(navigator.userAgent));
         } catch (e) {
             error('isIPad', e);
         }
     }
     function isPresto() {
-        /*|  {info: "Check if engine is Presto",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isPresto"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if engine is Presto",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isPresto",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/presto/i.test(navUserAgent));
+            return (/presto/i.test(navigator.userAgent));
         } catch (e) {
             error('isPresto', e);
         }
     }
     function isPrince() {
-        /*|  {info: "Check if engine is Prince",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isPrince"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if engine is Prince",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isPrince",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/prince/i.test(navUserAgent));
+            return (/prince/i.test(navigator.userAgent));
         } catch (e) {
             error('isPrince', e);
         }
     }
     function isSafari(){
-        /*|  {info: "Check if browser is Safari",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isSafari"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if browser is Safari",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isSafari",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            return (navigator.userAgent.indexOf("Chrome") == -1) && (navigator.userAgent.indexOf("Apple") != -1);
+            var nu = navigator.userAgent;
+            return (/chrome/i.test(nu)) && (/apple/i.test(nu));
         } catch(e){
             error('isSafari', e);
         }
     }
     function isSymbian () {
-        /*|  {info: "Check if OS is Symbian",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isSymbian"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if OS is Symbian",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isSymbian",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (isWebkit() && (/series60/i.test(navUserAgent) || /symbian/i.test(navUserAgent)));
+            var nu = navigator.userAgent;
+            return (isWebkit() && (/series60/i.test(nu) || /symbian/i.test(nu)));
         } catch (e) {
             error('isIPad', e);
         }
     }
     function isTrident() {
-        /*|  {info: "Check if engine is Trident",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isTrident"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if engine is Trident",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isTrident",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/trident/i.test(navUserAgent));
+            return (/trident/i.test(navigator.userAgent));
         } catch (e) {
             error('isTrident', e);
         }
     }
     function isWebkit() {
-        /*|  {info: "Check if engine is Webkit",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isWebkit"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if engine is Webkit",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isWebkit",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/webkit/i.test(navUserAgent));
+            return (/webkit/i.test(navigator.userAgent));
         } catch (e) {
             error('isWebkit', e);
         }
     }
     function isWindows(){
-        /*|  {info: "Check if OS is Windows",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isWindows"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if OS is Windows",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isWindows",
+            "returnType": "(Bool)"
+        }|*/
         try{
-            return navigator.platform.indexOf("Win") != -1;
+            return /win/i.test(navigator.platform);
         } catch (e) {
             error('isWindows', e);
         }
     }
     function isWindowsMobile() {
-        /*|  {info: "Check if device is Windows Mobile",
-         *    category: "Global",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#isWindowsMobile"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Check if device is Windows Mobile",
+            "category": "Global",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#isWindowsMobile",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var navUserAgent = navigator.userAgent;
-            return (/windows ce/i.test(navUserAgent));
+            return (/windows ce/i.test(navigator.userAgent));
         } catch (e) {
             error('isWindowsMobile', e);
         }
     }
 
-
-
-
-
     var _ie = IEVersion(),
-    _ie = IEVersion(),_chrm = ChromeVersion(),_ff = FirefoxVersion(),_op = OperaVersion(),_saf = SafariVersion(),
-    _droid = isAndroid(),_bbery = isBlackBerry(),_ipad = isIPad(),_ifon = isIPhone(),_ipod = isIPod(),_linx = isLinux(),_mac = isMac(),_palm = isPalmOS(),_symb = isSymbian(),_win = isWindows(),_winm = isWindowsMobile(),
-    _amay = isAmaya(),_gekk = isGecko(),_khtm = isKHTML(),_pres = isPresto(),_prin = isPrince(),_trid = isTrident(),_webk = isWebkit(),
-    console = $w.console,
-    _browser = (_ie != -1 && 'Internet Explorer') || (_chrm != -1 && 'Chrome') || (_ff != -1 && 'Firefox') || (_saf != -1 && 'Safari'),
-    _os = (_droid && 'Android') || (_bbery && 'BlackBerry') || (_linx && 'Linux') || ((_ipad || _ifon || _ipod) && 'iOS') || (_mac && 'Mac') || (_palm && 'PalmOS') || (_symb && 'Symbian') || (_win && 'Windows') || (_winm && 'Windows Mobile'),
-    _device = (_droid && 'Android') || (_bbery && 'BlackBerry') || (_ipad && 'iPad') || (_ifon && 'iPhone') || (_ipod && 'iPod') || (_linx && 'Linux') || (_mac && 'Mac') || (_palm && 'PalmOS') || (_symb && 'Symbian') || (_win && 'Windows') || (_winm && 'Windows Mobile'),
-    _engine = (_amay && 'Amaya') || (_gekk && 'Gekko') || (_khtm && 'KHTML') || (_pres && 'Presto') || (_prin && 'Prince') || (_trid && 'Trident') || (_webk && 'WebKit'),
-    _cors = (function () {
-        if ('withCredentials' in new XMLHttpRequest() || typeof XDomainRequest !== "undefined") {
-            return true;
-        }
-        return false;
-    })();
+        _ie = IEVersion(),_chrm = ChromeVersion(),_ff = FirefoxVersion(),_op = OperaVersion(),_saf = SafariVersion(),
+        _droid = isAndroid(),_bbery = isBlackBerry(),_ipad = isIPad(),_ifon = isIPhone(),_ipod = isIPod(),_linx = isLinux(),_mac = isMac(),_palm = isPalmOS(),_symb = isSymbian(),_win = isWindows(),_winm = isWindowsMobile(),
+        _amay = isAmaya(),_gekk = isGecko(),_khtm = isKHTML(),_pres = isPresto(),_prin = isPrince(),_trid = isTrident(),_webk = isWebkit(),
+        console = $w.console,
+        _browser = (_ie != -1 && 'Internet Explorer') || (_chrm != -1 && 'Chrome') || (_ff != -1 && 'Firefox') || (_saf != -1 && 'Safari'),
+        _os = (_droid && 'Android') || (_bbery && 'BlackBerry') || (_linx && 'Linux') || ((_ipad || _ifon || _ipod) && 'iOS') || (_mac && 'Mac') || (_palm && 'PalmOS') || (_symb && 'Symbian') || (_win && 'Windows') || (_winm && 'Windows Mobile'),
+        _device = (_droid && 'Android') || (_bbery && 'BlackBerry') || (_ipad && 'iPad') || (_ifon && 'iPhone') || (_ipod && 'iPod') || (_linx && 'Linux') || (_mac && 'Mac') || (_palm && 'PalmOS') || (_symb && 'Symbian') || (_win && 'Windows') || (_winm && 'Windows Mobile'),
+        _engine = (_amay && 'Amaya') || (_gekk && 'Gekko') || (_khtm && 'KHTML') || (_pres && 'Presto') || (_prin && 'Prince') || (_trid && 'Trident') || (_webk && 'WebKit'),
+        _cors = (function () {
+            return ('withCredentials' in new XMLHttpRequest() || typeof XDomainRequest !== "undefined");
+        })();
 
+    fillTemplate._observing = [];
+    fillTemplate._micro_templates = {};
+    fillTemplate._observing_poll = null;
+    fillTemplate._observing_previous = [];
+    $w["_$observer_overwrite"] = $w["_$observer_overwrite"] || Object.observe;
+    Object.observe = observe;
     if (!$w.__craydentLoaded) {
         var Craydent = {
-            browser:{
-                CURRENT: _browser,
-                CURRENT_VERSION:(_ie != -1 && _ie) || (_chrm != -1 && _chrm) || (_ff != -1 && _ff) || (_saf != -1 && _saf),
+                browser:{
+                    CURRENT: _browser,
+                    CURRENT_VERSION:(_ie != -1 && _ie) || (_chrm != -1 && _chrm) || (_ff != -1 && _ff) || (_saf != -1 && _saf),
+                    IE:isIE(),
+                    IE_VERSION:_ie,
+                    IE6:(_ie < 7.0 && _ie >= 6.0),
+                    IE7:(_ie < 8.0 && _ie >= 7.0),
+                    IE8:(_ie < 9.0 && _ie >= 8.0),
+                    CHROME:isChrome(),
+                    CHROME_VERSION:_chrm,
+                    FIREFOX:isFirefox(),
+                    FIREFOX_VERSION:_ff,
+                    OPERA:isOpera(),
+                    OPERA_VERSION:_op,
+                    SAFARI:isSafari(),
+                    SAFARI_VERSION:_saf
+                },
+                client: {
+                    BROWSER: _browser,
+                    CORES_SUPPORT: _cors,
+                    DEVICE: _device,
+                    ENGINE: _engine,
+                    OS:_os
+                },
+                engine:{
+                    CURRENT:_engine,
+                    AMAYA:_amay,
+                    GEKKO:_gekk,
+                    KHTML:_khtm,
+                    PRESTO:_pres,
+                    PRINCE:_prin,
+                    TRIDENT:_trid,
+                    WEBKIT:_webk
+                },
+                os:{
+                    CURRENT:_os,
+                    ANDROID:_droid,
+                    BLACKBERRY:_bbery,
+                    LINUX:_linx,
+                    IOS:(_ipad || _ifon || _ipod),
+                    MAC:_mac,
+                    PALM:_palm,
+                    SYMBIAN:_symb,
+                    WINDOWS:_win,
+                    WINDOWS_MOBILE:_winm
+                },
+                device:{
+                    CURRENT:_device,
+                    ANDROID:_droid,
+                    BLACKBERRY:_bbery,
+                    IPAD:_ipad,
+                    IPHONE:_ifon,
+                    IPOD: _ipod,
+                    LINUX:_linx,
+                    MAC:_mac,
+                    PALM:_palm,
+                    SYMBIAN:_symb,
+                    WINDOWS:_win,
+                    WINDOWS_MOBILE:_winm
+                },
+                ANDROID:_droid,
+                AMAYA:_amay,
+                BLACKBERRY:_bbery,
+                CHROME:isChrome(),
+                CHROME_VERSION:_chrm,
+                CLICK: "click",
+                CORES_SUPPORT: _cors,
+                DEBUG_MODE: !!$GET("debug"),
+                FIREFOX:isFirefox(),
+                FIREFOX_VERSION:FirefoxVersion(),
+                FIREFOX:isFirefox(),
+                GEKKO:isGecko(),
+                HANDPOINT: "pointer",
+                HIDDEN: "hidden",
                 IE:isIE(),
                 IE_VERSION:_ie,
                 IE6:(_ie < 7.0 && _ie >= 6.0),
                 IE7:(_ie < 8.0 && _ie >= 7.0),
                 IE8:(_ie < 9.0 && _ie >= 8.0),
-                CHROME:isChrome(),
-                CHROME_VERSION:_chrm,
-                FIREFOX:isFirefox(),
-                FIREFOX_VERSION:_ff,
+                IPAD:isIPad(),
+                IPHONE:isIPhone(),
+                IPOD: isIPod(),
+                KHTML:isKHTML(),
+                LINUX:isLinux(),
+                MAC:isMac(),
+                OBSERVE_CHECK_INTERVAL: 200,
+                ONMOUSEDOWN: "onmousedown",
+                ONMOUSEUP: "onmouseup",
                 OPERA:isOpera(),
-                OPERA_VERSION:_op,
+                OPERA_VERSION:OperaVersion(),
+                PAGE_NAME: (function () {
+                    var pn = $l.href.substring($l.href.lastIndexOf('/') + 1).replace(/([^#^?]*).*/gi,'$1');
+                    return !pn || pn.indexOf('.') == -1 ? "index.html" : pn;
+                })(),
+                PAGE_NAME_RAW: (function () {
+                    var pn = $l.href.substring($l.href.lastIndexOf('/') + 1).replace(/(.*)?\?.*/gi,'$1');
+                    return !pn || pn.indexOf('.') == -1 ? "index.html" : pn;
+                })(),
+                PALM:isPalmOS(),
+                POINTER: "default",
+                PRESTO:isPresto(),
+                PRINCE:isPrince(),
+                PROTOCOL: $l.protocol,
                 SAFARI:isSafari(),
-                SAFARI_VERSION:_saf
-            },
-            client: {
-                BROWSER: _browser,
-                CORES_SUPPORT: _cors,
-                DEVICE: _device,
-                ENGINE: _engine,
-                OS:_os
-            },
-            engine:{
-                CURRENT:_engine,
-                AMAYA:_amay,
-                GEKKO:_gekk,
-                KHTML:_khtm,
-                PRESTO:_pres,
-                PRINCE:_prin,
-                TRIDENT:_trid,
-                WEBKIT:_webk
-            },
-            os:{
-                CURRENT:_os,
-                ANDROID:_droid,
-                BLACKBERRY:_bbery,
-                LINUX:_linx,
-                IOS:(_ipad || _ifon || _ipod),
-                MAC:_mac,
-                PALM:_palm,
-                SYMBIAN:_symb,
-                WINDOWS:_win,
-                WINDOWS_MOBILE:_winm
-            },
-            device:{
-                CURRENT:_device,
-                ANDROID:_droid,
-                BLACKBERRY:_bbery,
-                IPAD:_ipad,
-                IPHONE:_ifon,
-                IPOD: _ipod,
-                LINUX:_linx,
-                MAC:_mac,
-                PALM:_palm,
-                SYMBIAN:_symb,
-                WINDOWS:_win,
-                WINDOWS_MOBILE:_winm
-            },
-            ANDROID:_droid,
-            AMAYA:_amay,
-            BLACKBERRY:_bbery,
-            CHROME:isChrome(),
-            CHROME_VERSION:_chrm,
-            CLICK: "click",
-            CORES_SUPPORT: _cors,
-            DEBUG_MODE: !!$GET("debug"),
-            FIREFOX:isFirefox(),
-            FIREFOX_VERSION:FirefoxVersion(),
-            FIREFOX:isFirefox(),
-            GEKKO:isGecko(),
-            HANDPOINT: "pointer",
-            HIDDEN: "hidden",
-            IE:isIE(),
-            IE_VERSION:_ie,
-            IE6:(_ie < 7.0 && _ie >= 6.0),
-            IE7:(_ie < 8.0 && _ie >= 7.0),
-            IE8:(_ie < 9.0 && _ie >= 8.0),
-            IPAD:isIPad(),
-            IPHONE:isIPhone(),
-            IPOD: isIPod(),
-            KHTML:isKHTML(),
-            LINUX:isLinux(),
-            MAC:isMac(),
-            ONMOUSEDOWN: "onmousedown",
-            ONMOUSEUP: "onmouseup",
-            OPERA:isOpera(),
-            OPERA_VERSION:OperaVersion(),
-            PAGE_NAME: (function () {
-                var pn = $l.href.substring($l.href.lastIndexOf('/') + 1).replace(/([^#^?]*).*/gi,'$1');
-                return !pn || pn.indexOf('.') == -1 ? "index.html" : pn;
-            })(),
-            PAGE_NAME_RAW: (function () {
-                var pn = $l.href.substring($l.href.lastIndexOf('/') + 1).replace(/(.*)?\?.*/gi,'$1');
-                return !pn || pn.indexOf('.') == -1 ? "index.html" : pn;
-            })(),
-            PALM:isPalmOS(),
-            POINTER: "default",
-            PRESTO:isPresto(),
-            PRINCE:isPrince(),
-            PROTOCOL: $l.protocol,
-            SAFARI:isSafari(),
-            SAFARI_VERSION:SafariVersion(),
-            SERVER: $l.host,
-            SERVER_PATH: $l.pathname,
-            SYMBIAN:isSymbian(),
-            TEMPLATE_VARS: [],
-            TRIDENT:isTrident(),
-            VERBOSE_LOGS:!!$GET("verbose"),
-            VERSION: $w.__craydentVersion,
-            VISIBLE: "visible",
-            WAIT: "wait",
-            WEBKIT:isWebkit(),
-            WINDOWS:isWindows(),
-            WINDOWS_MOBILE:isWindowsMobile(),
-            noConflict:function (setTo) {
-                var tmp = $;
-                $ = setTo || _$overwrite;
-                return tmp;
-            }
-        },
-        $c = Craydent,
-        __$$ = [
-        {
-            func: '$',
-            selector: 'getElementById',
-            overwrite: '_$overwrite'
-        },{
-            func: '$CSS',
-            selector: 'querySelectorAll',
-            overwrite: '_$CSSoverwrite'
-        },{
-            func: '$TAG',
-            selector: 'getElementsByTagName',
-            overwrite: '_$TAGoverwrite'
-        }];
+                SAFARI_VERSION:SafariVersion(),
+                SERVER: $l.host,
+                SERVER_PATH: $l.pathname,
+                SYMBIAN:isSymbian(),
+                TEMPLATE_VARS: [],
+                TEMPLATE_TAG_CONFIG: {
+                    IGNORE_CHARS:['\n'],
+                    /* loop config */
+                    FOR:{
+                        "begin":/(?:\$\{for (.*?);(.*?);(.*?\}?)\})|(?:\{\{for (.*?);(.*?);(.*?\}?)\}\})/i,
+                        "end":/(\$\{end for\})|(\{\{end for\}\})/i,
+                        "helper":function(code, body){
+                            var ttc = $c.TEMPLATE_TAG_CONFIG,
+                                mresult = code.match(ttc.FOR.begin),
+                                condition, exec, dvars, vars = "", ovars = {},code_result = "";
 
-    /*----------------------------------------------------------------------------------------------------------------
-    /-	Event tracking
-    /---------------------------------------------------------------------------------------------------------------*/
-//        EVENT_REGISTRY = {
-//            length : 0
-//        };// Array();
+                            for (var j = 1, jlen = mresult.length; j < jlen; j++) {
+                                if (!mresult[j]) {
+                                    continue;
+                                }
+                                mresult[j] = mresult[j].replace_all(['\\[', '\\]'], ['[', ']']).toString();
+                            }
+
+                                condition = mresult[2] || mresult[5];
+                                exec = mresult[3] || mresult[6];
+                                dvars = (mresult[1] || mresult[4]).split(',');
+                            for (var i = 0, len = dvars.length; i < len; i++) {
+                                var parts = ttc.VARIABLE_NAME(dvars[i]).split('=');
+                                vars += "var " + parts[0] + "=" + parts[1] + ";";
+                                ovars[parts[0]] = parts[0];
+                            }
+                            eval(vars);
+                            while (eval(fillTemplate(condition,ovars))) {
+                                code_result += body;
+                                eval(ttc.VARIABLE_NAME(exec));
+                            }
+
+                            return code_result;
+                        },
+                        "parser":function (code, obj, bind){
+                            var FOR = $c.TEMPLATE_TAG_CONFIG.FOR,
+                                blocks = __processBlocks(FOR.begin, FOR.end, code),
+                                code_result = "";
+
+                            for (var i = 0, len = blocks.length; i < len; i++) {
+                                var obj = blocks[i],
+                                    block = obj.block,
+                                    id = obj.id;
+
+                                code_result = code_result || obj.code;
+                                if (!code_result.contains(obj.id)) { continue; }
+                                code_result = code_result.replace_all(id,FOR.helper(block,obj.body));
+                            }
+
+                            return __logic_parser(code_result);
+                        }
+                    },
+                    FOREACH:{
+                        "begin":/(?:\$\{foreach (.*?)\s+in\s+(.*?)\s*\})|(?:\{\{foreach (.*?)\s+in\s+(.*?)\s*\}\})/i,
+                        //begin:/(?:\$\{foreach (.*?)\s+in\s+(.*?\}?)\s*\})|(?:\{\{foreach (.*?)\s+in\s+(\\?\[\s*\{.*:.*?\}\s*\\?\])\s*\}\})/i,
+                        "end":/(?:\$\{end foreach\})|(?:\{\{end foreach\}\})/i,
+                        "helper":function (code, body,rtnObject,uid, obj, bind, ref_obj) {
+                            var ttc = $c.TEMPLATE_TAG_CONFIG,
+                                FOREACH = ttc.FOREACH,
+                                mresult = code.match(FOREACH.begin),
+                                objs, var_name,
+                                code_result = "";
+
+                            for (var j = 1, jlen = mresult.length; j < jlen; j++) {
+                                if (!mresult[j]) {
+                                    continue;
+                                }
+                                mresult[j] = mresult[j].replace_all(['\\[', '\\]'], ['[', ']']).toString();
+                            }
+                            objs = tryEval(mresult[2] || mresult[4]);
+                            var_name = ttc.VARIABLE_NAME(mresult[1] || mresult[3]);
+
+                            //fillTemplate.binding.original.push(bind+"."+var_name);
+                            //fillTemplate.binding.replacer.push(fillTemplate.refs["ref_" + fillTemplate.refs.indexOf(objs)]);
+
+                            rtnObject = rtnObject || {};
+                            rtnObject[uid] += "var " + var_name + "s," + var_name + ";";
+                            rtnObject[var_name+"s"] = objs;
+                            if ($c.isArray(objs)) {
+                                fillTemplate.binding.original.push(bind + "." + var_name);
+                                var bindingCuids = "";
+                                for (var i = 0, len = objs.length; i < len; i++) {
+                                    if (typeof objs[i] == "object") {
+
+                                        bindingCuids += "," + fillTemplate._observing["hash_" + fillTemplate._observing.indexOf(objs[i])];
+                                    }
+                                    code_result += "${i="+i+","+var_name+"="+var_name+"s[i],null}" + body;
+                                }
+                                fillTemplate.binding.replacer.push(bindingCuids.substring(1));
+                            }
+
+                            return code_result;
+
+                        },
+                        "parser":function (code, ref_obj, bind){
+                            var ttc = $c.TEMPLATE_TAG_CONFIG,
+                                FOREACH = ttc.FOREACH,
+                                uid = "##"+suid()+"##",
+                                result_obj = {},
+                                code_result = "", post = "",
+                                blocks = __processBlocks(FOREACH.begin, FOREACH.end, code);
+                                //bindReplacers = {original:[],treplacer:[]};
+
+                            result_obj[uid] = "";
+
+                            for (var i = 0, len = blocks.length; i < len; i++) {
+                                var obj = blocks[i],
+                                    block = obj.block,
+                                    id = obj.id, index;
+                                if (!i && (index = obj.code.lastIndexOf("##")) != -1) {
+                                    post = obj.code.substring(index + 2);
+                                    obj.code = obj.code.substring(0,index + 2);
+                                }
+                                code_result = code_result || obj.code;
+                                if (!code_result.contains(obj.id)) { continue; }
+                                code_result = code_result.replace_all(id,FOREACH.helper(block,obj.body,result_obj,uid,obj,bind,ref_obj));
+                            }
+                            eval(result_obj[uid]);
+                            delete result_obj[uid];
+                            for (var prop in result_obj) {
+                                if (!result_obj.has(prop)) { continue; }
+                                eval(prop + "=" + "result_obj['" + prop + "']");
+                            }
+
+                            var matches = code_result.match(ttc.VARIABLE);
+                            matches.map(function (var_match) {
+                                var var_match_name = ttc.VARIABLE_NAME(var_match),
+                                    str = "";
+                                try { str = eval(var_match_name); } catch(e){ return; }
+
+                                code_result = code_result.replace(var_match,str||"");
+
+                            });
+
+                            return __logic_parser(code_result + post, obj, bind);
+                        }
+                    },
+                    WHILE: {
+                        "begin": /(?:\$\{while\s*\((.*?)\)\s*\})|(?:\{\{while\s*\((.*?)\)\s*\}\})/i,
+                        "end": /(?:\$\{end while\})|(?:\{\{end while\}\})/i,
+                        "helper": function (code,body) {
+                            var ttc = $c.TEMPLATE_TAG_CONFIG,
+                                WHILE = ttc.WHILE,
+                                mresult = code.match(WHILE.begin),
+                                vars = "", ovars = {},code_result = "",
+                                declared = fillTemplate.declared,
+                                loop_limit = 100000;
+                            for (var prop in declared) {
+                                if (!code.contains("${"+prop+"}") || !declared.hasOwnProperty(prop)) { continue; }
+                                var val = declared[prop];
+                                vars += "var " + prop + "=" + val + ";";
+                                ovars[prop] = prop;
+                            }
+                            eval(vars);
+                            while (eval(fillTemplate(mresult[1] || mresult[2],ovars))) {
+                                loop_limit--;
+                                if (loop_limit < 1) {
+                                    var msg = "fillTemplate While only support up to 100,000 iterations.  Possible infinite loop?";
+                                    console.error(msg);
+                                    throw msg;
+                                }
+                                code_result += body;
+                                (body.match(ttc.VARIABLE)||[]).map(function(var_matches){ eval(ttc.VARIABLE_NAME(var_matches)); });
+                            }
+                            fillTemplate.declared = declared;
+
+                            for (var prop in ovars) {
+                                if (!ovars.hasOwnProperty(prop)) { continue; }
+                                //var ovar = ovars[prop];
+                                code_result += "${" + prop + "=" + declared[prop] + ",null}";
+                                //declared[prop] = eval(ovars[prop]);
+                            }
+
+                            return code_result;
+                        },
+                        "parser": function (code, ref_obj, bind) {
+                            var ttc = $c.TEMPLATE_TAG_CONFIG,
+                                WHILE = ttc.WHILE,
+                                lookups = {},
+                                blocks = __processBlocks(WHILE.begin, WHILE.end, code, lookups),
+                                code_result = "", vars = "", declared = fillTemplate.declared, post = "";
+
+                            for (var i = 0, len = blocks.length; i < len; i++) {
+                                var obj = blocks[i],
+                                    block = obj.block,
+                                    id = obj.id;
+
+                                if (!i && (index = obj.code.lastIndexOf("##")) != -1) {
+                                    post = obj.code.substring(index + 2);
+                                    obj.code = obj.code.substring(0,index + 2);
+                                }
+
+                                code_result = code_result || obj.code;
+                                if (!code_result.contains(obj.id)) { continue; }
+                                code_result = code_result.replace_all(id,WHILE.helper(block,obj.body));
+                            }
+
+                            for (var prop in declared) {
+                                if (!code.contains("${"+prop+"}")) { continue; }
+                                vars += "var " + prop + "=" + declared[prop] + ";";
+                            }
+                            eval(vars);
+                            var matches = code_result.match(ttc.VARIABLE);
+                            matches.map(function (var_match) {
+                                var var_match_name = ttc.VARIABLE_NAME(var_match),
+                                    var_match_index = code_result.indexOf(var_match),
+                                    before, after;
+                                if (tryEval("var "+ var_match_name +";") !== null) {
+                                    var_match_index += var_match.length;
+                                }
+
+
+                                before = code_result.substring(0,var_match_index).replace_all(var_match,eval(var_match_name));
+                                after = code_result.substring(code_result.indexOf(var_match) + var_match.length);
+                                code_result = before + after;
+                            });
+
+
+                            return __logic_parser(code_result + post);
+
+                        }
+                    },
+                    /* end loop config*/
+
+                    /* conditional config*/
+                    IF:{
+                        "begin":/\$\{if\s+\((.*?)(?!\{)\)\s*\}|\{\{if\s+\((.*?)(?!\{)\)\s*\}\}/i,
+                        "elseif":/\$\{elseif\s+\((.*?)(?!\{)\)\s*\}|\{\{elseif\s+\((.*?)(?!\{)\)\s*\}\}/i,
+                        "else":/\$\{else\}|\{\{else\}\}/i,
+                        "end":/\$\{end if\}|\{\{end if\}\}/i,
+                        "helper":function (code) {
+                            var IF = $c.TEMPLATE_TAG_CONFIG.IF,
+                                ifmatch = (code.match(IF.begin) || []).condense(),
+                                endlength = code.match(IF.end)[0].length,
+                                startindex = code.indexOfAlt(IF.begin),
+                                endindex = code.indexOfAlt(IF.end);
+
+                            if (ifmatch.length) {
+                                for (var j = 1, jlen = ifmatch.length; j < jlen; j++) {
+                                    ifmatch[j] = ifmatch[j].replace_all(['\\[', '\\]'], ['[', ']']).toString();
+                                }
+                                var pre = code.substring(0, startindex), post = code.substring(endindex + endlength),
+                                    ifsyntax = new RegExp(IF.begin.source+"|"+IF.elseif.source+"|"+IF["else"].source,'i');
+
+                                if (!code.match(new RegExp(IF.elseif.source+"|"+IF["else"].source,'ig'))) {
+                                    if ("undefined" == ifmatch[1] || !tryEval(ifmatch[1])) {
+                                        return pre + post;
+                                    }
+                                    return pre + code.substring(startindex + ifmatch[0].length, endindex) + post;
+                                }
+                                ifmatch = (code.match(ifsyntax.addFlags('g')) || []).condense();
+                                for (var i = 0, len = ifmatch.length; i < len; i++) {
+                                    var ife = ifmatch[i].match(ifsyntax).condense(),
+                                        condition = ife[1],
+                                        value = "undefined" == condition ? false : tryEval(condition),
+                                        sindex = code.indexOf(ifmatch[i]) + ifmatch[i].length;
+
+                                    if (value !== undefined && value) {
+                                        var eindex = code.indexOf(ifmatch[i + 1]);
+                                        if (eindex == -1) {
+                                            return pre + code.substring(sindex) + post;
+                                        }
+                                        return pre + code.substring(sindex, eindex) + post;
+                                    } else if (ifmatch[i].match(IF["else"])) {
+                                        return pre + code.substring(sindex,endindex) + post;
+                                    }
+                                }
+                                return pre + post;
+                            }
+                            return code;
+                        },
+                        "parser":function (code, obj, bind){
+                            var IF = $c.TEMPLATE_TAG_CONFIG.IF,
+                                blocks = __processBlocks(IF.begin, IF.end, code),
+                                code_result = "";
+                            for (var i = 0, len = blocks.length; i < len; i++) {
+                                var obj = blocks[i],
+                                    block = obj.block,
+                                    id = obj.id;
+
+                                code_result = code_result || obj.code;
+                                if (!code_result.contains(obj.id)) { continue; }
+                                code_result = IF.helper(code_result.replace(id, block));
+                            }
+                            return __logic_parser(code_result);
+                        }
+                    },
+                    SWITCH: {
+                        "begin": /(\$\{switch\s+\((.*?)\)\s*\})|(\{\{switch\s+\((.*?)\)\s*\}\})/i,
+                        "end": /(\$\{end switch\})|(\{\{end switch\}\})/i,
+                        "case": /(?:\$\{case\s+(.*?)\s*?:\})|(?:\{\{case\s+(.*?)\s*?:\}\})/i,
+                        "default": /(\$\{default\})|(\{\{default\}\})/i,
+                        "break": /(\$\{break\})|(\{\{break\}\})/i,
+                        "helper": function (code) {
+                            var SWITCH = $c.TEMPLATE_TAG_CONFIG.SWITCH,
+                                csyntax = SWITCH["case"],
+                                switchmatch = (code.match(SWITCH.begin) || []).condense(),
+                                endlength = code.match(SWITCH.end)[0].length,
+                                startindex = code.indexOfAlt(SWITCH.begin),
+                                endindex = code.indexOfAlt(SWITCH.end),
+                                brk = SWITCH["break"], dflt = SWITCH["default"];
+
+
+                            if (switchmatch.length) {
+
+                                for (var j = 1, jlen = switchmatch.length; j < jlen; j++) {
+                                    switchmatch[j] = switchmatch[j].replace_all(['\\[', '\\]'], ['[', ']']).toString();
+                                }
+                                var pre = code.substring(0, startindex), post = code.substring(endindex + endlength),
+                                    val = tryEval(switchmatch[2]) || switchmatch[2],
+                                    cgsyntax = SWITCH["case"].addFlags("g"),
+                                    cases = code.match(cgsyntax);
+                                code = code.substring(startindex + (switchmatch[0] || "").length, endindex);
+
+                                if (!cases) {
+                                    return pre + code.cut(startindex, endindex + endlength) + post;
+                                }
+                                for (var i = 0, len = cases.length; i < len; i++) {
+                                    var cs = cases[i].match(SWITCH["case"]),
+                                        cvalue = cs[1] || cs[2];
+                                    if (val == cvalue) {
+                                        var cindex = code.indexOf(cases[i]),
+                                            bindex = code.indexOfAlt(brk, cindex);
+                                        bindex = bindex == -1 ? code.length : bindex;
+                                        return pre + code.substring(cindex + cases[i].length, bindex).replace(cgsyntax, '') + post;
+                                    }
+                                }
+                                var dindex = code.indexOfAlt(dflt);
+                                if (dindex != -1) {
+                                    return pre + code.substring(dindex + code.match(dflt)[0].length).replace(cgsyntax, '').replace(brk, '') + post;
+                                }
+
+                            }
+                            return code;
+                        },
+                        "parser": function (code, obj, bind) {
+                            var SWITCH = $c.TEMPLATE_TAG_CONFIG.SWITCH,
+                                blocks = __processBlocks(SWITCH.begin, SWITCH.end, code),
+                                code_result = "";
+
+                            for (var i = 0, len = blocks.length; i < len; i++) {
+                                var obj = blocks[i],
+                                    block = obj.block,
+                                    id = obj.id;
+
+                                code_result = code_result || obj.code;
+                                if (!code_result.contains(obj.id)) { continue; }
+                                code_result = SWITCH.helper(code_result.replace(id, block));
+                            }
+                            return __logic_parser(code_result);
+                        }
+
+                    },
+                    /* end conditional config*/
+
+                    /* error handling and execution config */
+                    SCRIPT: {
+                        "begin": /(\$\{script\})|(\{\{script\}\})/i,
+                        "end": /(\$\{end script\})|(\{\{end script\}\})/i,
+                        "parser": function (code, obj, bind) {
+                            var SCRIPT = $c.TEMPLATE_TAG_CONFIG.SCRIPT,
+                                sindex = code.indexOfAlt(SCRIPT.begin),
+                                slen = code.match(SCRIPT.begin)[0].length,
+                                eindex = code.indexOfAlt(SCRIPT.end),
+                                elen = code.match(SCRIPT.end)[0].length;
+
+                            if (eindex == -1) { eindex = undefined; }
+                            var block = code.substring(sindex + slen,eindex), str = "",
+                            echo = function (value) { echo.out += value; };
+                            echo.out = "";
+                            str = eval("(function(){"+block+";return echo.out;})()");
+
+                            return __logic_parser(code.cut(sindex,eindex+elen, str));
+                        }
+
+                    },
+                    TRY: {
+                        "begin": /(\$\{try\})|(\{\{try\}\})/i,
+                        "catch": /(?:\$\{catch\s+\((.*)?\)\s*\})|(?:\{\{catch\s+\((.*)?\)\s*\}\})/i,
+                        "finally": /(\$\{finally\})|(\{\{finally\}\})/i,
+                        "end": /(\$\{end try\})|(\{\{end try\}\})/i,
+                        "helper": function (code, lookups, exec) {
+                            var TRY = $c.TEMPLATE_TAG_CONFIG.TRY,
+                                cindex = code.indexOfAlt(TRY["catch"]),
+                                findex = code.indexOfAlt(TRY["finally"]),
+                                eindex = code.indexOfAlt(TRY["end"]),
+                                tend = cindex;
+
+                            if (tend == -1) {
+                                tend = findex != -1 ? findex : eindex;
+                            }
+
+                            var tindex = code.indexOfAlt(TRY.begin),
+                                body = code.substring(tindex + code.match(TRY.begin)[0].length, tend),
+                                pre = code.substring(0,tindex), post = code.substring(eindex + code.match(TRY.end)[0].length),
+                                regex = /##[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}##/i,
+                                match = body.match(regex), str = "", id,
+                                echo = function (value) {
+                                    echo.out += value;
+                                };
+                            echo.out = "";
+                            while(match && match.length){
+                                id = match.splice(0)[0];
+                                body = body.replace(id, ";echo('" + TRY.helper(lookups[id], lookups) + "');");
+                            }
+                            match = pre.match(regex);
+                            while(match && match.length) {
+                                id = match.splice(0)[0];
+                                pre = pre.replace(id, TRY.helper(lookups[id], lookups));
+                            }
+                            match = post.match(regex);
+                            while(match && match.length) {
+                                id = match.splice(0)[0];
+                                post = post.replace(id, TRY.helper(lookups[id], lookups));
+                            }
+                            exec && eval(exec);
+                            try {
+                                str = eval("(function(){" + body + ";return echo.out; })()");
+                            } catch (e) {
+                                if (cindex != -1) {
+                                    echo.out = "";
+                                    tend = findex != -1 ? findex : eindex;
+                                    var catchBlock = code.substring(cindex, tend),
+                                        catchLine = catchBlock.match(TRY["catch"]);
+                                    catchBlock = catchBlock.replace(catchLine[0], ''),
+                                    errorString = JSON.stringify(e);
+
+                                    match = catchBlock.match(regex);
+                                    while(match && match.length) {
+                                        id = match.splice(0)[0];
+                                        catchBlock = catchBlock.replace(id, ";echo('" + TRY.helper(lookups[id], lookups,"var " + catchLine[1] + "=" + errorString + ";") + "');");
+                                    }
+                                    str += eval("(function(" + catchLine[1] + "){" + catchBlock + ";return echo.out;})('" + errorString + "')");
+                                }
+                            } finally {
+                                if (findex != -1) {
+                                    echo.out = "";
+                                    str += eval("(function(){" + code.substring(findex + code.match(TRY["finally"])[0].length, eindex) + ";return echo.out; })()");
+                                }
+                            }
+                            return pre + str + post;
+                        },
+                        "parser": function (code, obj, bind) {
+                            var TRY = $c.TEMPLATE_TAG_CONFIG.TRY,
+                                lookups = {}, code_result,
+                                blocks = __processBlocks(TRY.begin, TRY.end, code, lookups);
+
+                            var obj = blocks[0],
+                                block = obj.block,
+                                id = obj.id;
+
+                            return __logic_parser(TRY.helper(obj.code.replace(id, block), lookups));
+                            //return __logic_parser(code_result);
+                        }
+
+                    },
+                    /* end error handling config */
+
+                    /* tokens config */
+                    VARIABLE:/(?:\$\{((?!\$)\S)*?\})|(?:\{\{((?!\{\{)\S)*?\}\})/gi,
+                    VARIABLE_NAME:function(match){
+                        return  match.slice(2,match.contains('}}') ? -2 : -1);
+                    },
+                    DECLARE:{
+                        "syntax": /(?:\$\{DECLARE (.*?);?\})|(?:\{\{DECLARE (.*?);?\}\})/i,
+                        "parser": function (htmlTemplate, declare){
+                            var matches = declare.match($c.TEMPLATE_TAG_CONFIG.DECLARE.syntax),
+                                var_nameValue = (matches[1]||matches[2]).strip(';').split("=");
+
+                            //fillTemplate.declared[var_nameValue[0]] = var_nameValue[1];
+                            $c.merge(fillTemplate.declared, tryEval("({"+matches[1].replace_all('=',":")+"})"));
+                            return htmlTemplate.replace_all(declare,'');
+                        }
+                    }
+                    /* end tokens config */
+                },
+                TRIDENT:isTrident(),
+                VERBOSE_LOGS:!!$GET("verbose"),
+                VERSION: $w.__craydentVersion,
+                VISIBLE: "visible",
+                WAIT: "wait",
+                WEBKIT:isWebkit(),
+                WINDOWS:isWindows(),
+                WINDOWS_MOBILE:isWindowsMobile(),
+                noConflict:function (setTo) {
+                    var tmp = $;
+                    $ = setTo || _$overwrite;
+                    return tmp;
+                },
+
+                // methods
+
+                $COOKIE:$COOKIE,
+                $GET:$GET,
+                $SET:$SET,
+                $DEL:$DEL,
+                $COMMIT:$COMMIT,
+                $ROLLBACK:$ROLLBACK,
+                ChromeVersion:ChromeVersion,
+                Benchmarker:Benchmarker,
+                FirefoxVersion:FirefoxVersion,
+                IEVersion:IEVersion,
+                OperaVersion:OperaVersion,
+                SafariVersion:SafariVersion,
+                Cursor:Cursor,
+                OrderedList:OrderedList,
+                Queue:Queue,
+                Request:Request,
+                Set:Set,
+                addObjectPrototype:addObjectPrototype,
+                addHTMLPrototype:addHTMLPrototype,
+                ajax:ajax,
+                cacheImages:cacheImages,
+                cout:cout,
+                cuid:cuid,
+                error:error,
+                fillTemplate:fillTemplate,
+                foo:foo,
+                getUniqueId:getUniqueId,
+                isAmaya:isAmaya,
+                isAndroid:isAndroid,
+                isBlackBerry:isBlackBerry,
+                isChrome:isChrome,
+                isFirefox:isFirefox,
+                isGecko:isGecko,
+                isIE6:isIE6,
+                isIE:isIE,
+                isIPad:isIPad,
+                isIPhone:isIPhone,
+                isIPod:isIPod,
+                isKHTML:isKHTML,
+                isLinux:isLinux,
+                isMac:isMac,
+                isMobile:isMobile,
+                isNull:isNull,
+                isOpera:isOpera,
+                isPalmOS:isPalmOS,
+                isPresto:isPresto,
+                isPrince:isPrince,
+                isSafari:isSafari,
+                isSymbian:isSymbian,
+                isTrident:isTrident,
+                isWebkit:isWebkit,
+                isWindows:isWindows,
+                isWindowsMobile:isWindowsMobile,
+                killPropagation:killPropagation,
+                logit:logit,
+                now:now,
+                observe:observe,
+                parseBoolean:parseBoolean,
+                parseRaw:parseRaw,
+                rand:rand,
+                tryEval:tryEval,
+                wait:wait,
+                xmlToJson:xmlToJson,
+                zipit:zipit
+            },
+            $c = Craydent,
+            __$$ = [
+                {
+                    "func": '$',
+                    "selector": 'getElementById',
+                    "overwrite": '_$overwrite'
+                },{
+                    "func": '$CSS',
+                    "selector": 'querySelectorAll',
+                    "overwrite": '_$CSSoverwrite',
+                    "default": '_querySelectorAll'
+                },{
+                    "func": '$TAG',
+                    "selector": 'getElementsByTagName',
+                    "overwrite": '_$TAGoverwrite'
+                }];
+
 
         $w._onload = $w.onload || foo;
         $w.onload = function () {
@@ -3266,15 +5330,15 @@ if (__thisIsNewer) {
 
         for (var i = 0, len = __$$.length; i < len; i++) {
             var __$ = __$$[i];
-            $w[__$.overwrite] = $w[__$.overwrite] || $w[__$.func] || function(){};
+            $w[__$.overwrite] = $w[__$.overwrite] || /*$w[__$.default] ||*/ $w[__$.func] || foo;
             $w[__$.func] = eval('$w.'+__$.func+' = (function (object, single) {try {return _craydentSelector(\''+__$.selector+'\', \''+__$.overwrite+'\', object, single);} catch (e) {error('+__$.func+', e);}})');
             $w[__$.func].duplicate = __dup;
             $w[__$.overwrite] && $w[__$.func].duplicate($w[__$.overwrite]);
         }
 
-        $w._showoverwrite = $w.show || function () {};
-        $w._hideoverwrite = $w.hide || function () {};
-        $w._toggleoverwrite = $w.toggle || function () {};
+        $w._showoverwrite = $w.show || foo;
+        $w._hideoverwrite = $w.hide || foo;
+        $w._toggleoverwrite = $w.toggle || foo;
         $w.show = function (object) {
             _displayHelper(object, "show");
         };
@@ -3285,40 +5349,25 @@ if (__thisIsNewer) {
             _displayHelper(object, "toggle");
         };
     }
-//    EVENT_REGISTRY.Exists = function (id, event, func, pos){
-//        try {
-//            pos = pos ? pos : function(){};
-//            if (EVENT_REGISTRY[id]) {
-//                for(eri = 0; eri < EVENT_REGISTRY[id].length; eri++){
-//                    if(EVENT_REGISTRY[id][eri][0] == event && EVENT_REGISTRY[id][eri][1] == func){
-//                        pos.index = eri;
-//                        return true;
-//                    }
-//                }
-//            }
-//            return false;
-//        } catch (e) {
-//            error("EVENT_REGISTRY.Exists", e);
-//        }
-//    };
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	String class Extensions
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	String class Extensions
+     /---------------------------------------------------------------------------------------------------------------*/
     _ext(String, 'capitalize', function (pos, everyWord) {
-        /*|  {info: "String class extension to capitalize parts of the string",
-         *    category: "String",
-         *    parameters:[
-         *        {pos: "(Int[]) Index of the string to capitalize"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {pos: "(Int) Index of the string to capitalize"},
-         *            {everyWord: "(Bool) Flag to capital every word"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.capitalize"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to capitalize parts of the string",
+            "category": "String",
+            "parameters":[
+                {"pos": "(Int[]) Index of the string to capitalize"}],
+
+             "overloads":[
+                {"parameters":[
+                {"pos": "(Int) Index of the string to capitalize"},
+                {"everyWord": "(Bool) Flag to capital every word"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.capitalize",
+            "returnType": "(String)"
+        }|*/
         try {
             pos = pos || [0];
             !$c.isArray(pos) && (pos = [pos]);
@@ -3334,14 +5383,17 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'convertUTCDate', function (delimiter) {
-        /*|  {info: "String class extension to convert date string to UTC format",
-         *    category: "String",
-         *    parameters:[
-         *        {delimiter: "(String) Character that delimits the date string"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.convertUTCDate"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to convert date string to UTC format",
+            "category": "String",
+            "parameters":[
+                {"delimiter": "(String) Character that delimits the date string"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.convertUTCDate",
+            "returnType": "(String)"
+        }|*/
         try {
             var dateAsString = this;
             if (dateAsString.substring(dateAsString.length - 2) == ".0") {
@@ -3355,92 +5407,177 @@ if (__thisIsNewer) {
             error('String.convertUTCDate', e);
         }
     }, true);
+    _ext(String, 'count', function (word) {
+        /*|{
+            "info": "String class extension to count the number of occurences of a word or phrase",
+            "category": "String",
+            "parameters":[
+                {word": "(String) Word or phrase to count"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.count",
+            "returnType": "(Int)"
+        }|*/
+        try {
+            if (!$c.isRegExp(word)) {
+                word = new RegExp(word, "g");
+            } else if (!word.global) {
+                var reg_str = word.toString(),
+                    index = reg_str.lastIndexOf('/'),
+                    options = reg_str(index + 1);
+
+                reg_str = reg_str.substring(1,index);
+                word = new RegExp(word, "g"+options);
+            }
+            return (this.match(word) || []).length;
+        } catch (e) {
+            error("String.count", e);
+        }
+    }, true);
+    _ext(String, 'cut', function (si, ei, replacement) {
+        /*|{
+            "info": "String class extension to remove between the provided indexes",
+            "category": "String",
+            "parameters":[
+                {"start_index": "(Integer) Start index to cut"},
+                {"end_index": "(Integer) End index to cut"}],
+
+            "overloads":[{
+                "parameters":[
+                    {"start_index": "(Integer) Start index to cut"},
+                    {"end_index": "(Integer) End index to cut"},
+                    {"replacement": "(String) String to put in place of the cut"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.cut",
+            "returnType": "(String)"
+        }|*/
+        try {
+            if (isNull(si) || isNull(si)) {
+                return this;
+            }
+            return this.slice(0, si) + (replacement || "")+ this.slice(ei);
+        } catch (e) {
+            error("String.cut", e);
+        }
+    }, true);
     _ext(String, 'ellipsis', function (before, after) {
-        /*|  {info: "String class extension to shorten by ellpsis",
-         *    category: "String",
-         *    parameters:[
-         *        {before: "(Int) Number of characters to use before using ellipsis"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {before: "(Int) Number of characters to use before using ellipsis"},
-         *            {after: "(Int) Number of characters to use after the ellipsis"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.ellipsis"},
-         *    returnType: “(String)”
-         * |*/
-         try {
+        /*|{
+            "info": "String class extension to shorten by ellipsis",
+            "category": "String",
+            "parameters":[
+                {"before": "(Int) Number of characters to use before using ellipsis"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"before": "(Int) Number of characters to use before using ellipsis"},
+                    {"after": "(Int) Number of characters to use after the ellipsis"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.ellipsis",
+            "returnType": "(String)"
+        }|*/
+        try {
             after = after || 0;
             if (before + after > this.length) {
                 return this;
             }
-            return this.slice(0, before) + "..." + this.slice(-1*after);
+            //return this.slice(0, before) + "..." + this.slice(-1*after);
+            return this.cut(before, -1*after, "...");
         } catch (e) {
             error('String.ellipsis', e);
         }
-     });
-    _ext(String, 'endsWith', function (/*str, str1*/) {
-        /*|  {info: "String class extension to check if the string ends with the given string",
-         *    category: "String",
-         *    parameters:[
-         *        {infinite: "any number of arguments can be passed"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.endsWith"},
-         *    returnType: “(Bool)”
-         * |*/
+    });
+    _ext(String, 'endsWith', _endsWith);
+    _ext(String, 'endsWithAny', _endsWith);
+    _ext(String, 'fillTemplate', function (arr_objs, offset, max, bound) {
+        /*|{
+         "info": "String class extension to fill template based on template syntax",
+            "category": "String",
+            "featured": true,
+            "parameters":[
+                {"objs": "(Objects[]) Objects to fill the template variables"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"objs": "(Objects[]) Objects to fill the template variables"},
+                    {"offset": "(Int) The start index of the Object array"},
+                    {"max": "(Int) The maximum number of records to process"}]}
+                {"parameters":[
+                    {"objs": "(Objects[]) Objects to fill the template variables"},
+                    {"max": "(Int) The maximum number of records to process"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.fillTemplate",
+            "returnType": "(String)"
+         }|*/
         try {
-            for (var i = 0, len = arguments.length; i < len; i++) {
-                if (arguments[i] == this) {
-                    continue;
-                }
-                if (arguments[i] == this.slice(-arguments[i].length)) {
-                    return arguments[i];
-                }
-            }
-            return false;
-        } catch (e) {
-            error('String.endsWith', e);
-        }
-     });
-    _ext(String, 'fillTemplate', function (arr_objs, offset, max) {
-        /*|  {info: "String class extension to fill template based on template syntax",
-         *    category: "String",
-         *    parameters:[
-         *        {objs: "(Objects[]) Objects to fill the template variables"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {objs: "(Objects[]) Objects to fill the template variables"},
-         *            {offset: "(Int) The start index of the Object array"},
-         *            {max: "(Int) The maximum number of records to process"}]}
-         *        {parameters:[
-         *            {objs: "(Objects[]) Objects to fill the template variables"},
-         *            {max: "(Int) The maximum number of records to process"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.fillTemplate"},
-         *    returnType: “(String)”
-         * |*/
-        try {
-            return fillTemplate(this, arr_objs, offset, max);
+            return fillTemplate(this, arr_objs, offset, max, bound);
         } catch (e) {
             error('String.fillTemplate', e);
         }
     });
-    _ext(String, 'indexOfAlt', function(regex, pos) {
-        /*|  {info: "String class extension to find the index based on a regular expression",
-         *    category: "String",
-         *    parameters:[
-         *        {regex: "(RegExp) Regular expression to check value against"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {regex: "(RegExp) Regular expression to check value against"},
-         *            {pos: "(Int) Index offset to start"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.indexOfAlt"},
-         *    returnType: “(Int)”
-         * |*/
+    _ext(String, 'highlight', function (search, clazz, tag) {
+        /*|{
+            "info": "String class extension to surround search words with the given tag(default span) and class (default chighlight)",
+            "category": "String",
+            "parameters":[
+                {"search": "(String) String to search"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"search": "(RegExp) Regular expression to search"},
+                    {"clazz": "(String) Class to add for highlighting"}]},
+                {"parameters":[
+                    {"search": "(RegExp) Regular expression to search"},
+                    {"clazz": "(String) Class to add for highlighting"}]},
+                {"parameters":[
+                    {"search": "(String) String to search"},
+                    {"clazz": "(String) Class to add for highlighting"},
+                    {"tag": "(String) Tag to use to surround the search"}]}
+                {"parameters":[
+                    {"search": "(String) String to search"},
+                    {"clazz": "(String) Class to add for highlighting"},
+                    {"tag": "(String) Tag to use to surround the search"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.cut",
+            "returnType": "(String)"
+        }|*/
         try {
+            clazz = clazz || "chighlight";
+            tag = tag || "span";
+            var txt = "", flags = "g";
+            if ($c.isRegExp(search) && !search.source.contains("(")) {
+                txt = "(" + search.source + ")";
+                if (search.ignoreCase) {
+                    flags += "i";
+                }
+                if (search.multiline) {
+                    flags += "m";
+                }
+            } else if (!search.contains("(")) {
+                txt = "(" + search + ")";
+            }
+            return this.replace((new RegExp(txt)).addFlags(flags),"<" + tag + " class=\"" + clazz + "\">$1</" + tag + ">");
+        } catch (e) {
+            error("String.highlight", e);
+        }
+    }, true);
+    _ext(String, 'indexOfAlt', function(regex, pos) {
+        /*|{
+            "info": "String class extension to find the index based on a regular expression",
+            "category": "String",
+            "parameters":[
+                {"regex": "(RegExp) Regular expression to check value against"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"regex": "(RegExp) Regular expression to check value against"},
+                    {"pos": "(Int) Index offset to start"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.indexOfAlt",
+            "returnType": "(Int)"
+        }|*/
+        try {
+            if (isNull(regex)) { return -1; }
             pos = pos || 0;
             var index = this.substring(pos).search(regex);
             return (index >= 0) ? (index + pos) : index;
@@ -3449,44 +5586,73 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'ireplace_all', function(replace, subject) {
-        /*|  {info: "String class extension to replace all substrings ignoring case",
-         *    category: "String",
-         *    parameters:[
-         *        {replace: "(String) String to replace"},
-         *        {subject: "(String) String to replace with"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.ireplace_all"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to replace all substrings ignoring case",
+            "category": "String",
+            "parameters":[
+                {"replace": "(String) String to replace"},
+                {"subject": "(String) String to replace with"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.ireplace_all",
+            "returnType": "(String)"
+        }|*/
         try {
             return _replace_all.call(this, replace, subject, "gi")
         } catch (e) {
             error("String.ireplace_all", e);
         }
     }, true);
+    _ext(String, 'isCuid', function (msFormat) {
+        /*|{
+            "info": "String class extension to check if the string is a cuid",
+            "category": "String",
+            "parameters":[
+                {"msFormat": "(Bool) use microsoft format if true"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.isCuid",
+            "returnType": "(Bool)"
+        }|*/
+        try {
+            var pre = "", post = "", length = 36;
+            msFormat && ((pre = "{") && (post = "}"),length += 2);
+            return this.length == length && (new RegExp(pre+"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"+post)).test(this);
+        } catch (e) {
+            error("String.isCuid", e);
+        }
+    }, true);
     _ext(String, 'isBlank', function () {
-        /*|  {info: "String class extension to check if the string is empty",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.isBlank"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "String class extension to check if the string is empty",
+            "category": "String",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.isBlank",
+            "returnType": "(Bool)"
+        }|*/
         try {
             return !this.length;
-        //return (this === "");
+            //return (this === "");
         } catch (e) {
             error("String.isBlank", e);
         }
     }, true);
     _ext(String, 'isValidEmail', function () {
-        /*|  {info: "String class extension to check if string is a valid email",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.isValidEmail"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "String class extension to check if string is a valid email",
+            "category": "String",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.isValidEmail",
+            "returnType": "(Bool)"
+        }|*/
         try {
             if (!$c.isBlank(this) && !isNull(this)) {
                 var reg = /^([a-zA-Z0-9_\.\-])+\@(([a-zA-Z0-9\-])+\.)+([a-zA-Z0-9]{2,4})+$/;
@@ -3498,19 +5664,20 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'lastIndexOfAlt', function(regex, pos) {
-        /*|  {info: "String class extension to find the last index based on a regular expression",
-         *    category: "String",
-         *    parameters:[
-         *        {regex: "(RegExp) Regular expression to check value against"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {regex: "(RegExp) Regular expression to check value against"},
-         *            {pos: "(Int) Max index to go up to in the search"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.lastIndexOfAlt"},
-         *    returnType: “(Int)”
-         * |*/
+        /*|{
+            "info": "String class extension to find the last index based on a regular expression",
+            "category": "String",
+            "parameters":[
+                {"regex": "(RegExp) Regular expression to check value against"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"regex": "(RegExp) Regular expression to check value against"},
+                    {"pos": "(Int) Max index to go up to in the search"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.lastIndexOfAlt",
+            "returnType": "(Int)"
+        }|*/
         try {
             regex = (regex.global) ? regex : new RegExp(regex.source, "g" + (regex.ignoreCase ? "i" : "") + (regex.multiLine ? "m" : ""));
             pos = pos || this.length;
@@ -3532,14 +5699,17 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'ltrim', function (character) {
-        /*|  {info: "String class extension to remove characters from the beginning of the string",
-         *    category: "String",
-         *    parameters:[
-         *        {character: "(Char[]) Character to remove"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.ltrim"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to remove characters from the beginning of the string",
+            "category": "String",
+            "parameters":[
+                {"character": "(Char[]) Character to remove"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.ltrim",
+            "returnType": "(String)"
+        }|*/
         try {
             return _trim(this, 'l', character);
         } catch (e) {
@@ -3547,14 +5717,17 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'pluralize', function () {
-        /*|  {info: "String class extension to do a best guess pluralization of the string",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.pluralize"},
-         *    returnType: “(String)”
-         * |*/
-         try {
+        /*|{
+            "info": "String class extension to do a best guess pluralization of the string",
+            "category": "String",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.pluralize",
+            "returnType": "(String)"
+        }|*/
+        try {
             var str = this;
 
             if (_irregularNouns[str]) {
@@ -3578,17 +5751,20 @@ if (__thisIsNewer) {
         } catch (e) {
             error('String.pluralize', e);
         }
-     });
+    });
     _ext(String, 'replace_all', function(replace, subject) {
-        /*|  {info: "String class extension to replace all substrings (case sensitive)",
-         *    category: "String",
-         *    parameters:[
-         *        {replace: "(String) String to replace"},
-         *        {subject: "(String) String to replace with"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.replace_all"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to replace all substrings (case sensitive)",
+            "category": "String",
+            "parameters":[
+                {"replace": "(String) String to replace"},
+                {"subject": "(String) String to replace with"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.replace_all",
+            "returnType": "(String)"
+        }|*/
         try {
             return _replace_all.call(this, replace, subject, "g")
         } catch (e) {
@@ -3596,13 +5772,16 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'reverse', function () {
-        /*|  {info: "String class extension to reverse the string",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.reverse"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to reverse the string",
+            "category": "String",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.reverse",
+            "returnType": "(String)"
+        }|*/
         try {
             return this.split('').reverse().join('');
         } catch (e) {
@@ -3610,14 +5789,17 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'rtrim', function (character) {
-        /*|  {info: "String class extension to remove characters from the end of the string",
-         *    category: "String",
-         *    parameters:[
-         *        {character: "(Char[]) Character to remove"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.rtrim"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to remove characters from the end of the string",
+            "category": "String",
+            "parameters":[
+                {"character": "(Char[]) Character to remove"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.rtrim",
+            "returnType": "(String)"
+        }|*/
         try {
             return _trim(this, 'r', character);
         } catch (e) {
@@ -3625,41 +5807,45 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'sanitize', function () {
-        /*|  {info: "String class extension to remove potential XSS threats",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.sanitize"},
-         *    returnType: “(String)”
-         * |*/
-        try {
-            var thiss = this.replace(/&/gi, "&#38;").
-            replace(/#/gi, "&#35;").
-            replace(/%/gi, "&#37;").
-            replace(/;/gi, "&#59;").
-            replace(/\+/gi, "&#43;").
-            replace(/\-/gi, "&#45;").
-            replace(/\'/gi, "&#39;").
-            replace(/\\"/gi, "&#34;").
-            replace(/\(/gi, "&#40;").
-            replace(/\)/gi, "&#41;").
-            replace(/\</gi, "&#60;").
-            replace(/\>/gi, "&#62;");
+        /*|{
+            "info": "String class extension to remove potential XSS threats",
+            "category": "String",
+            "parameters":[],
 
-            return thiss;
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.sanitize",
+            "returnType": "(String)"
+        }|*/
+        try {
+            return this.replace(/&/gi, "&#38;").
+                replace(/#/gi, "&#35;").
+                replace(/%/gi, "&#37;").
+                replace(/;/gi, "&#59;").
+                replace(/\+/gi, "&#43;").
+                replace(/\-/gi, "&#45;").
+                replace(/\'/gi, "&#39;").
+                replace(/\\"/gi, "&#34;").
+                replace(/\(/gi, "&#40;").
+                replace(/\)/gi, "&#41;").
+                replace(/\</gi, "&#60;").
+                replace(/\>/gi, "&#62;");
         } catch (e) {
             error("String.sanitize", e);
         }
     }, true);
     _ext(String, 'singularize', function () {
-        /*|  {info: "String class extension to do a best guess singularization of the string",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.singularize"},
-         *    returnType: “(String)”
-         * |*/
-         try {
+        /*|{
+            "info": "String class extension to do a best guess singularization of the string",
+            "category": "String",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.singularize",
+            "returnType": "(String)"
+        }|*/
+        try {
             var str = this, key;
 
             if (key = $c.keyOf(_irregularNouns, str)) {
@@ -3685,53 +5871,38 @@ if (__thisIsNewer) {
         } catch (e) {
             error('String.singularize', e);
         }
-     });
-    _ext(String, 'startsWith', function (/*str, str1*/) {
-        /*|  {info: "String class extension to check if the string starts with the given string",
-         *    category: "String",
-         *    parameters:[
-         *        {infinit: "any number of arguments can be passed"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.startsWith"},
-         *    returnType: “(Bool)”
-         * |*/
-        try {
-            for (var i = 0, len = arguments.length; i < len; i++) {
-                if (arguments[i] == this) {
-                    continue;
-                }
-                if (arguments[i] == this.slice(0, arguments[i].length)) {
-                    return arguments[i];
-                }
-            }
-            return false;
-        } catch (e) {
-            error('String.startsWith', e);
-        }
     });
+    _ext(String, 'startsWith', _startsWith);
+    _ext(String, 'startWithAny', _startsWith);
     _ext(String, 'strip', function(character) {
-        /*|  {info: "String class extension to remove characters from the beginning and end of the string",
-         *    category: "String",
-         *    parameters:[
-         *        {character: "(Char[]) Character to remove"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.strip"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to remove characters from the beginning and end of the string",
+            "category": "String",
+            "parameters":[
+                {"character": "(Char[]) Character to remove"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.strip",
+            "returnType": "(String)"
+        }|*/
         return _strip(this, character);
     }, true);
     _ext(String, 'toCurrencyNotation', function (separator) {
-        /*|  {info: "String class extension to change string to currency",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {separator: "(Char) Character to use as delimitor"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.toCurrencyNotation"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to change string to currency",
+            "category": "String",
+            "parameters":[],
+
+            "overloads":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"separator": "(Char) Character to use as delimiter"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.toCurrencyNotation",
+            "returnType": "(String)"
+        }|*/
         try {
             separator = separator || ",";
             return this.toString().replace(/\B(?=(\d{3})+(?!\d))/g, separator);
@@ -3740,46 +5911,50 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'toDateTime', function (options) {
-        /*|  {info: "String class extension to convert string to datetime",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {options: "(Object) specs with optional properties:<br />(Bool) gmt<br />(Int) offset<br />(String) format"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.toDateTime"},
-         *    returnType: “(Mixed)”
-         * |*/
+        /*|{
+            "info": "String class extension to convert string to datetime",
+            "category": "String",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"options": "(Object) specs with optional properties:<br />(Bool) gmt<br />(Int) offset<br />(String) format"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.toDateTime",
+            "returnType": "(Mixed)"
+        }|*/
         try {
-        /*
-        *  options properties:
-        *  gmt:true - convert to GMT
-        *  offset:offset from GMT
-        *  format:format used in Datetime.format
-        **/
+            /*
+             *  options properties:
+             *  gmt:true - convert to GMT
+             *  offset:offset from GMT
+             *  format:format used in Datetime.format
+             **/
             options = options || {};
             var strDatetime = this;
             if (/\d\d\d\d-\d\d-\d\d/.test(strDatetime)) {
                 strDatetime = this.replace("-","/").replace("-","/");
             }
+            if ($c.isString(strDatetime)) {
+                strDatetime = strDatetime.replace(/(am|pm)/i,' $1');
+            }
             var dt = new Date(strDatetime);
             if (!dt.getDate()) {
                 var parts = [],
-                dtstring = this[0] == "(" ? this.substring(1,this.length-1) : this,
-                chars = ["\\.","\\/","-","\\s*?"];
+                    dtstring = this[0] == "(" ? this.substring(1,this.length-1) : this,
+                    chars = ["\\.","\\/","-","\\s*?"];
 
                 for (var i = 0, len = chars.length; i < len && !dt.getDate(); i++) {
                     // using format m(m).d(d).yy(yy) or d(d).m(m).yy(yy) or yy(yy).m(m).d(d) or yy(yy).d(d).m(m)
                     // using format m(m)/d(d)/yy(yy) or d(d)/m(m)/yy(yy) or yy(yy)/m(m)/d(d) or yy(yy)/d(d)/m(m)
                     // using format m(m)-d(d)-yy(yy) or d(d)-m(m)-yy(yy) or yy(yy)-m(m)-d(d) or yy(yy)-d(d)-m(m)
                     var c = chars[i],
-                    regex = new RegExp("(\\d{1,4})" + c + "\\s*?(\\d{1,2})" + c + "\\s*?(\\d{2,4})(.*)");
+                        regex = new RegExp("(\\d{1,4})" + c + "\\s*?(\\d{1,2})" + c + "\\s*?(\\d{2,4})(.*)");
                     if ((parts = dtstring.match(regex)) && parts.length > 1) {
                         // assume year is first
                         if (parts[1].length == 4) {
-                            parts[0] = parts[1],
-                            parts[1] = parts[2],
+                            parts[0] = parts[1];
+                            parts[1] = parts[2];
                             parts[3] = parts[0];
                         }
                         // assume month is first
@@ -3789,7 +5964,7 @@ if (__thisIsNewer) {
                             dt = new Date(parts[2] + "/" + parts[1] + "/" + parts[3] + parts[4]);
                         }
                     }
-                    if (!dt.getDate() && (parts = dtstring.match(/(\d{1,2})\/(\d{1,2})-(\d{2,4})(.*)/)) && parts.length > 1) {
+                    if (!dt.getDate() && (parts = dtstring.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})(.*)/)) && parts.length > 1) {
                         dt = new Date(parts[2] + "/" + parts[1] + "/" + parts[3] + parts[4]);
                     } else if (!dt.getDate() && (parts = dtstring.match(/(\d{1,2})-([a-zA-Z]{3,9})-(\d{2,4})(.*)/)) && parts.length > 1) {
                         dt = new Date(dtstring.replace("-", " "));
@@ -3797,7 +5972,7 @@ if (__thisIsNewer) {
                 }
             }
             if (options.gmt) {
-                var offset = options.offset !== undefined ? options.offset : _getGMTOffset.call(new Date());
+                var offset = !isNull(options.offset) ? options.offset : _getGMTOffset.call(new Date());
                 dt = new Date(dt.valueOf() + offset * 60*60000);
             }
             return options.format ? dt.format(options.format) : dt;
@@ -3806,13 +5981,16 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'toDomElement', function () {
-        /*|  {info: "String class extension to convert html string to DOM element",
-         *    category: "String",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.toDomElement"},
-         *    returnType: “(HTMLElement)”
-         * |*/
+        /*|{
+            "info": "String class extension to convert html string to DOM element",
+            "category": "String",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.toDomElement",
+            "returnType": "(HTMLElement)"
+        }|*/
         try {
             var div = $d.createElement('div'), children;
 
@@ -3854,14 +6032,17 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(String, 'trim', function(character) {
-        /*|  {info: "String class extension to remove characters from the beginning and end of the string",
-         *    category: "String",
-         *    parameters:[
-         *        {character: "(Char[]) Character to remove"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#string.trim"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "String class extension to remove characters from the beginning and end of the string",
+            "category": "String",
+            "parameters":[
+                {"character": "(Char[]) Character to remove"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#string.trim",
+            "returnType": "(String)"
+        }|*/
         try {
             return _trim(this, undefined, character);
         } catch (e) {
@@ -3870,43 +6051,70 @@ if (__thisIsNewer) {
     }, true);
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Array class Extensions
-    /---------------------------------------------------------------------------------------------------------------*/
-    _ext(Array, 'aggregate', function (piplines) {
-        /*|  {info: "Array class extension to ",
-         *    category: "Array",
-         *    parameters:[
-         *        {: ""},
-         *        {: ""},
-         *        {: ""}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {: ""},
-         *            {: ""},
-         *            {: ""}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.aggregate"},
-         *    returnType: “(Array)”
-         * |*/
-        try {
+     /-	Array class Extensions
+     /---------------------------------------------------------------------------------------------------------------*/
 
+    _ext(Array, 'aggregate', function (pipelines) {
+        /*|{
+            "info": "Array class extension to perform mongo style aggregation",
+            "category": "Array",
+            "featured": true,
+            "parameters":[
+                {"pipelines": "(Object[]) Array of stages defined in mongodb"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.aggregate",
+            "returnType": "(Array)"
+        }|*/
+        try {
+            var rtn = this;
+            for (var i = 0, len = pipelines.length; i < len; i++) {
+                //if (pipelines.hasOwnProperty(prop)) { continue; }
+                rtn = __processStage(rtn, pipelines[i]);
+            }
+            return rtn;
         } catch (e) {
             error("Array.aggregate", e);
         }
     }, true);
-    _ext(Array,'buildTree', function (rt,child,options) {
+    _ext(Array, 'buildTree', function (parentFinder,childFinder,options) {
+        /*|{
+            "info": "Array class extension to create a parent/child hierarchy",
+            "category": "Array",
+            "parameters":[
+                {"rootFinder": "(Function) Function to determine the parent.   Should return a boolean value."},
+                {"childFinder": "(String) Property name of the object to use as a grouping."}],
+
+            "overloads":[
+                {"parameters":[
+                    {"rootFinder": "(Function) Function to determine the parent.   Should return a boolean value."},
+                    {"childFinder": "(Function) Function to determine the grouping."}]},
+
+                {"parameters":[
+                    {"rootFinder": "(Function) Function to determine the parent.   Should return a boolean value."},
+                    {"childFinder": "(String) Property name of the object to use as a grouping."},
+                    {"options":"(Object) Options to customize properties,  Valid property is:<br />childProperty"}]},
+
+                {"parameters":[
+                    {"rootFinder": "(Function) Function to determine the parent.   Should return a boolean value."},
+                    {"childFinder": "(String) Property name of the object to use as a grouping."},
+                    {"options":"(Object) Options to customize properties,  Valid property is:<br />childProperty"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.buildTree",
+            "returnType": "(Array)"
+        }|*/
         try {
             options = options || {};
             var rtnArr = [];
             var i = 0,objt,cats=[],catDict={},tmp={}, singles = {};
-            var prop = options.childProp || "children";
+            var prop = options.childProperty || "children";
             while(objt=this[i++]){
-                var cat = $c.isFunction(child) ? child(objt) : objt[child],
+                var cat = $c.isFunction(childFinder) ? childFinder(objt) : objt[childFinder],
                     rootFound = cats.contains(cat);
 
                 objt[prop] = objt[prop] || [];
-                if (rt(objt)) {
+                if (rootFinder(objt)) {
                     delete singles[cat];
 
                     if (!rootFound && tmp[cat]) {
@@ -3931,9 +6139,7 @@ if (__thisIsNewer) {
                 }
             }
             for (var prop in singles) {
-                if (!singles.hasOwnProperty(prop)) {
-                    continue;
-                }
+                if (!singles.hasOwnProperty(prop)) { continue; }
                 for (var j = 0, len = singles[prop].length; j < len; j++) {
                     singles[prop][j].children = [];
 
@@ -3946,109 +6152,179 @@ if (__thisIsNewer) {
         }
     });
     _ext(Array, 'complexSort', function(specs){
-        /*|  {info: "Array class extension to ",
-         *    category: "Array",
-         *    parameters:[
-         *        {: ""},
-         *        {: ""},
-         *        {: ""}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {: ""},
-         *            {: ""},
-         *            {: ""}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.complexSort"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to sort using lookups",
+            "category": "Array",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"specs": "(Object) specs with common properties:<br />(Mixed) props<br />(Boolean) reverse<br />(Function) lookupprimer<br />(Function) propprimer<br />(Object) lookup<br />(Function) lookupfunc"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.complexSort",
+            "returnType": "(Array)"
+        }|*/
         try {
             specs = specs || {};
             var defunc = function(v){return v;},
-            props = specs.props,
-            rev = specs.rev,
-            lprimer = specs.lookupprimer || defunc
-            pprimer = specs.propprimer || defunc,
-            lookup = specs.lookup,
-            lookupfunc = specs.lookupfunc || function(id){
-                if(lookup){return lookup[id];}
-                return id;
-            };
+                props = specs.props,
+                rev = specs.reverse,
+                lprimer = specs.lookupprimer || defunc,
+                pprimer = specs.propprimer || defunc,
+                lookup = specs.lookup,
+                lookupfunc = specs.lookupfunc || function(id){
+                    if(lookup){return lookup[id];}
+                    return id;
+                };
 
             if(props.isString()){props=[props];}
             var craftVal = function(v,prop){
-                var val =
-                pprimer(
-                    (lookup && lookup[lprimer(v)][prop]) ||
-                    (lookupfunc && lookupfunc(lprimer(v))[prop]) ||
-                    v[prop]
-                )
-                return val;
-            }
-            prop_sort = function (a,b,p) {
-            p = p||0,
-            prop = props[p];
+                    return pprimer(
+                        (lookup && lookup[lprimer(v)][prop]) ||
+                        (lookupfunc && lookupfunc(lprimer(v))[prop]) ||
+                        v[prop]
+                    );
+                },
+                prop_sort = function (a,b,p) {
+                    p = p||0;
+                    var prop = props[p];
 
-            if(!prop){return -1;}
+                    if(!prop){return -1;}
 
-                var aVal = craftVal(a,prop),//pprimer((lookup && lookup[lprimer(a)][prop]) || a[prop]),
-                bVal = craftVal(b,prop);//pprimer((lookup && lookup[lprimer(b)][prop]) || b[prop]);
+                    var aVal = craftVal(a,prop),//pprimer((lookup && lookup[lprimer(a)][prop]) || a[prop]),
+                        bVal = craftVal(b,prop);//pprimer((lookup && lookup[lprimer(b)][prop]) || b[prop]);
 
-                if (aVal == bVal) {
-                    return prop_sort(a,b,p+1);
-                }
+                    if (aVal == bVal) {
+                        return prop_sort(a,b,p+1);
+                    }
 
-                if (aVal > bVal) {return 1;}
-                return -1;
-           };
-
-            return this.sort(prop_sort);
+                    if (aVal > bVal) {return 1;}
+                    return -1;
+                };
+            this.sort(prop_sort);
+            return rev && this.reverse || this;
         } catch (e) {
             error('Array.complexSort', e);
         }
     },true);
     _ext(Array, 'condense', function (check_values) {
-        /*|  {info: "Array class extension to reduce the size of the Array removing blank strings, undefines, and nulls",
-         *    category: "Array",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {check_values: "(Bool) Flag to remove duplicates"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.condense"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to reduce the size of the Array removing blank strings, undefined's, and nulls",
+            "category": "Array",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"check_values": "(Bool) Flag to remove duplicates"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.condense",
+            "returnType": "(Array)"
+        }|*/
         return _condense(this, check_values);
     }, true);
     _ext(Array, 'count', function(condition) {
-        /*|  {info: "Array class extension to count the length and optionally filter items first",
-         *    category: "Array",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {condition: "(Mixed) Query used in Array.where"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.count"},
-         *    returnType: “(Int)”
-         * |*/
+        /*|{
+            "info": "Array class extension to count the length and optionally filter items first",
+            "category": "Array",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"condition": "(Mixed) Query used in Array.where"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.count",
+            "returnType": "(Int)"
+        }|*/
         return this.where(condition).length;
     });
+    _ext(Array, 'delete', function(condition, justOne) {
+        /*|{
+         "info": "Array class extension to delete records",
+         "category": "Array",
+         "parameters":[
+         {"condition": "(Mixed) Query following find/where clause syntax"}],
+
+         "overloads":[
+         {"parameters":[
+         {"condition": "(Mixed) Query following find/where clause syntax"},
+         {"justOne": "(Boolean) Flag for deleting just one records [Default is: true]"}]}],
+
+         "description": "http://www.craydent.com/library/1.8.0/docs#array.delete",
+         "returnType": "(Array)"
+         }|*/
+        try {
+            justOne = parseBoolean(isNull(justOne) ? true : isNull(justOne.justOne, justOne));
+            // if no condition was given, remove all
+            if (!condition) {
+                return this.splice(0,justOne ? 1 : this.length);
+            }
+
+            var arr = [], indexes = [];
+            _whereHelper(this, condition,function (obj, i) {
+                if (justOne) {
+                    arr = arr.concat(this.splice(i,1));
+                    return false
+                }
+                indexes.push(i);
+                return true;
+            });
+            for (var i = indexes.length - 1; i >= 0; i--) {
+                arr = this.splice(indexes[i],1).concat(arr);
+            }
+
+            return arr;
+        } catch (e) {
+            error("Array.delete", e);
+            return false;
+        }
+    }, true);
+    _ext(Array, 'distinct', function(fields, condition) {
+        /*|{
+         "info": "Array class extension to get all unique records by fields specified",
+         "category": "Array",
+         "parameters":[
+         {"fields": "(Mixed) Fields to use as the projection and unique comparison"}],
+
+         "overloads":[
+         {"parameters":[
+         {"fields": "(Mixed) Fields to use as the projection and unique comparison"},
+         {"condition": "(Mixed) Query following find/where clause syntax"}]}],
+
+         "description": "http://www.craydent.com/library/1.8.0/docs#array.distinct",
+         "returnType": "(Array)"
+         }|*/
+        try {
+            if ($c.isString(fields)) {
+                fields = [fields];
+            }
+
+//            var projection = {},len = fields.length;
+//            for (var i = 0; i < len; i++) {
+//                projection[fields[i]] = 1;
+//            }
+
+
+            return this.group(fields,condition);
+        } catch (e) {
+            error("Array.distinct", e);
+            return false;
+        }
+    });
     _ext(Array, 'every', function(callback, thisObject) {
-        /*|  {info: "Array class extension to implement .every method",
-         *    category: "Array",
-         *    parameters:[
-         *        {callback: "(Function) Callback to test for each element"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback to test for each element"},
-         *            {thisObject: "(Mixed) Context for the callback function"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array."},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Array class extension to implement .every method",
+            "category": "Array",
+            "parameters":[
+                {"callback": "(Function) Callback to test for each element"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback to test for each element"},
+                    {"thisObject": "(Mixed) Context for the callback function"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.every",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var thisObject = thisObject || this;
             for (var i= 0, n= this.length; i<n; i++)
@@ -4060,25 +6336,27 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'filter', function(func /*, thiss*/) {
-        /*|  {info: "Array class extension to implement filter",
-         *    category: "Array",
-         *    parameters:[
-         *        {func: "(Function) Callback function used to determine if value should be returned"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {func: "(Function) Callback function used to determine if value should be returned"},
-         *            {thiss: "(Mixed) Specify the context on callback function"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.filter"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to implement filter",
+            "category": "Array",
+            "parameters":[
+                {"func": "(Function) Callback function used to determine if value should be returned"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"func": "(Function) Callback function used to determine if value should be returned"},
+                    {"thiss": "(Mixed) Specify the context on callback function"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.filter",
+            "returnType": "(Array)"
+        }|*/
         try {
             if (!$c.isFunction(func)) {
+                //noinspection ExceptionCaughtLocallyJS
                 throw new TypeError();
             }
-            var filtered = new Array(),
-            thiss = arguments[1] || this;
+            var filtered = [],
+                thiss = arguments[1] || this;
             for (var i = 0; i < this.length; i++) {
                 var val = this[i];
                 if (func.call(thiss, val, i, this)) {
@@ -4092,23 +6370,106 @@ if (__thisIsNewer) {
             return false;
         }
     }, true);
-    _ext(Array, 'groupBy', function(clause){
-        /*|  {info: "Array class extension to ",
-         *    category: "Array",
-         *    parameters:[
-         *        {clause: "(Mixed) "}],
+    _ext(Array, 'group', function(params) {
+        /*|{
+            "info": "Array class extension to group records by fields",
+            "category": "Array",
+            "parameters":[
+                {"params": "(Object) specs with common properties:<br />(Object) key<br />(Mixed) cond<br />(Function) reduce<br />(Object) initial"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.group",
+            "returnType": "(Array)"
+        }|*/
+
+        /*         *    parameters:[
+         *        {fields: "(Mixed) Fields to use as the projection and to group by"}],
          *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.groupBy"},
-         *    returnType: “(Array)”
-         * |*/
+         *    overloads:[
+         *        {parameters:[
+         *            {fields: "(Mixed) Fields to use as the projection and to group by"},
+         *            {condition: "(Mixed) Query following find/where clause syntax"}]},
+         *        {parameters:[
+         *            {fields: "(Mixed) Fields to use as the projection and to group by"},
+         *            {condition: "(Mixed) Query following find/where clause syntax"},
+         *            {reduce: "(Function) Method that operates on the records during the grouping operation"}]},
+         *        {parameters:[
+         *            {fields: "(Mixed) Fields to use as the projection and to group by"},
+         *            {condition: "(Mixed) Query following find/where clause syntax"},
+         *            {reduce: ""},
+         *            {initial: ""}]}],*/
+        try {
+            //var fields = params.field || params.key,
+            var key = params.field || params.key,
+                condition = params.cond,
+                reduce = params.reduce || foo,
+                initial = params.initial || {},
+                keyf = params.keyf,
+                finalize = params.finalize || foo;
+            if ($c.isString(key)) {
+                key = key.split(',');
+            }
+            if ($c.isArray(key)) {
+                var tmp = {};
+                for (var i = 0, len = key.length; i < len; i++) {
+                    tmp[key[i]] = 1;
+                }
+                key = tmp;
+            }
+
+            var props = $c.keys(initial),
+                key = $c.keys(key),
+                arr = [], result = {}, id = suid();
+            _whereHelper(this, condition,function (obj, i) {
+                // _groupFieldHelper creates a grouping string based on the field value pairs
+                var fields = key;
+                if (!key && keyf) {
+                    fields = $c.isFunction(keyf) ? keyf(doc) : keyf;
+                }
+                var prop = _groupFieldHelper(obj, fields), addit = false;
+                if (!result[prop]) {
+                    addit = true;
+                    var tmp = $c.duplicate(initial);
+                    //for (var i = 0, len = props.length; i < len; i++) {
+                    //    tmp[props[i]] = initial[props[i]];
+                    //}
+                    result[prop] = tmp;
+                }
+                var curr = $c.duplicate(obj), item;
+                reduce(curr, result[prop]);
+                item = _copyWithProjection(fields, obj);
+                item[id] = prop;
+                addit && arr.push(item);
+                return true;
+            });
+
+            for (var i = 0, len = arr.length; i < len; i++) {
+                //var prop = _groupFieldHelper(arr[i], $c.keys(arr[i]));
+                arr[i] = finalize($c.merge(arr[i],result[arr[i][id]]));
+            }
+            return arr;
+        } catch (e) {
+            error("Array.group", e);
+            return false;
+        }
+    });
+    _ext(Array, 'groupBy', function(clause){ // TODO: reconsider this with .group
+        /*|{
+            "info": "Array class extension to ",
+            "category": "Array",
+            "parameters":[
+                {"clause": "(Mixed) "}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.groupBy",
+            "returnType": "(Array)"
+        }|*/
         try {
             var props = [];
             if ($c.isObject(clause)) {
-                for (var prop in clause) {
-                    if (clause.hop(prop)) {
-                        props.push(props);
-                    }
-                }
+                props = $c.keys(clause);
             }
             if ($c.isString(clause)) {
                 props = clause.split(',');
@@ -4118,18 +6479,23 @@ if (__thisIsNewer) {
 
             var arr = [];
             var temp = {};
+            // loop through each record
             for (var i = 0, len = this.length; i < len; i++) {
                 var obj = this[i],
                     nprop = fillTemplate(clause,obj);
-                temp[nprop] = temp[nprop] || {}
+                temp[nprop] = temp[nprop] || {};
                 for (var prop in obj) {
+                    if (!obj.has(prop)) { continue; }
                     var propOnly = prop.replace(/.*\.(.*$)/, '$1'),
                         agg = prop.replace("."+propOnly, '');
 
-                    if (obj.hop(prop) && props.indexOf(propOnly)) {
+                    if (props.indexOf(propOnly)) {
 
                         switch (agg) {
                             case "avg":
+                                var avg = temp[nprop].avg = temp[nprop].avg || 0,
+                                    n = temp[nprop].n = temp[nprop].n || 1;
+                                temp[nprop].avg = (obj[prop]+avg*n)/temp[nprop].n++;
                                 break;
                             case "checksum_agg":
                                 break;
@@ -4138,6 +6504,8 @@ if (__thisIsNewer) {
                                 temp[nprop].sum += obj[prop];
                                 break;
                             case "count":
+                                temp[nprop].count = temp[nprop].count || 0;
+                                temp[nprop].count++;
                                 break;
                             case "stddev":
                                 break;
@@ -4166,32 +6534,37 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'indexOf', function(value) {
-        /*|  {info: "Array class extension to implement indexOf",
-         *    category: "Array",
-         *    parameters:[
-         *        {value: "(Mixed) value to find"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.indexOf"},
-         *    returnType: “(Int)”
-         * |*/
+        /*|{
+            "info": "Array class extension to implement indexOf",
+            "category": "Array",
+            "parameters":[
+                {"value": "(Mixed) value to find"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.indexOf",
+            "returnType": "(Int)"
+        }|*/
         return _indexOf(this, value);
     }, true);
     _ext(Array, 'indexOfAlt', function(value, func) {
-        /*|  {info: "Array class extension to find index of a value based on a callback function",
-         *    category: "Array",
-         *    parameters:[
-         *        {value: "(Mixed) value to find"},
-         *        {func: "(Function) Callback function used to do the comparison"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.indexOfAlt"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to find index of a value based on a callback function",
+            "category": "Array",
+            "parameters":[
+                {"value": "(Mixed) value to find"},
+                {"func": "(Function) Callback function used to do the comparison"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.indexOfAlt",
+            "returnType": "(Array)"
+        }|*/
         try {
-            var isRegExp = value.constructor == RegExp,
-                len = this.length,
+            var len = this.length,
                 i = 0;
             while (i < len) {
-                if (isRegExp && value.test(this[i])) { return i;
+                if ($c.isRegExp(value) && value.test(this[i])) { return i;
                 } else if (value instanceof Object ? func(this[i], value) : func(this[i]) === value) return i;
                 ++i;
             }
@@ -4201,15 +6574,18 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, "innerJoin", function (arr, on) {
-        /*|  {info: "Array class extension to do an inner join on arrays",
-         *    category: "Array",
-         *    parameters:[
-         *        {arr: "(Array) "},
-         *        {on: ""}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.innerJoin"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to do an inner join on arrays",
+            "category": "Array",
+            "parameters":[
+                {"arr": "(Array) Array to be joined with"},
+                {"on": "(String) Condition to join on"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.innerJoin",
+            "returnType": "(Array)"
+        }|*/
         try {
             return _joinHelper(this, arr, on, true);
         } catch (e) {
@@ -4217,14 +6593,15 @@ if (__thisIsNewer) {
         }
     });
     _ext(Array, 'insert', function(value) {
-        /*|  {info: "Array class extension to add to the array",
-         *    category: "Array",
-         *    parameters:[
-         *        {value: "(Mixed) value to add"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.value"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Array class extension to add to the array",
+            "category": "Array",
+            "parameters":[
+                {"value": "(Mixed) value to add"}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.insert",
+            "returnType": "(Bool)"
+        }|*/
         try {
             if ($c.isArray(value)) {
                 this.concat(value);
@@ -4238,15 +6615,18 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'insertAfter', function(index, value) {
-        /*|  {info: "Array class extension to add to the array after a specific index",
-         *    category: "Array",
-         *    parameters:[
-         *        {index: "(Int) Index to add after"},
-         *        {value: "(Mixed) Value to add"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.insertAfter"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Array class extension to add to the array after a specific index",
+            "category": "Array",
+            "parameters":[
+                {"index": "(Int) Index to add after"},
+                {"value": "(Mixed) Value to add"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.insertAfter",
+            "returnType": "(Bool)"
+        }|*/
         try {
             this.splice(index + 1, 0, value);
             return true;
@@ -4256,15 +6636,18 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'insertBefore', function(index, value) {
-        /*|  {info: "Array class extension to add to the array before a specific index",
-         *    category: "Array",
-         *    parameters:[
-         *        {index: "(Int) Index to add before"},
-         *        {value: "(Mixed) Value to add"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.insertBefore"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Array class extension to add to the array before a specific index",
+            "category": "Array",
+            "parameters":[
+                {"index": "(Int) Index to add before"},
+                {"value": "(Mixed) Value to add"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.insertBefore",
+            "returnType": "(Bool)"
+        }|*/
         try {
             this.splice(index, 0, value);
             return true;
@@ -4274,13 +6657,16 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'isEmpty', function() {
-        /*|  {info: "Array class extension to check if the array is empty",
-         *    category: "Array",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.isEmpty"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Array class extension to check if the array is empty",
+            "category": "Array",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.isEmpty",
+            "returnType": "(Bool)"
+        }|*/
         try {
             return (this.length == 0);
         } catch (e) {
@@ -4289,21 +6675,18 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, "joinLeft", function (arr, on) {
-        /*|  {info: "Array class extension to do an outer left join on arrays",
-         *    category: "Array",
-         *    parameters:[
-         *        {arr: "(Array) "},
-         *        {on: ""}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {: ""},
-         *            {: ""},
-         *            {: ""}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.joinLeft"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to do an outer left join on arrays",
+            "category": "Array",
+            "parameters":[
+                {"arr": "(Array) Secondary array to be joined with"},
+                {"on": "(String) Condition to join on"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.joinLeft",
+            "returnType": "(Array)"
+        }|*/
         try {
             return _joinHelper(this, arr, on);
         } catch (e) {
@@ -4311,21 +6694,22 @@ if (__thisIsNewer) {
         }
     });
     _ext(Array, "joinRight", function (arr, on) {
-        /*|  {info: "Array class extension to do an outer right join on arrays",
-         *    category: "Array",
-         *    parameters:[
-         *        {arr: "(Array) "},
-         *        {on: ""}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {: ""},
-         *            {: ""},
-         *            {: ""}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.joinRight"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to do an outer right join on arrays",
+            "category": "Array",
+            "parameters":[
+                {"arr": "(Array) Primary array to be joined with"},
+                {"on": "(String) Condition to join on"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"": ""},
+                    {"": ""},
+                    {"": ""}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.joinRight",
+            "returnType": "(Array)"
+        }|*/
         try {
             return _joinHelper(arr, this, on);
         } catch (e) {
@@ -4333,14 +6717,17 @@ if (__thisIsNewer) {
         }
     });
     _ext(Array, 'limit', function(max) {
-        /*|  {info: "Array class extension to return a limited amount of items",
-         *    category: "Array",
-         *    parameters:[
-         *        {max: "(Int) Maximum number of items to return"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.limit"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to return a limited amount of items",
+            "category": "Array",
+            "parameters":[
+                {"max": "(Int) Maximum number of items to return"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.limit",
+            "returnType": "(Array)"
+        }|*/
         try {
             var arr = [];
             for (var i = 0; i < max && this[i]; i++){
@@ -4352,22 +6739,23 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'map', function(callback /*, thisObject*/) {
-        /*|  {info: "Array class extension to implement map",
-         *    category: "Array",
-         *    parameters:[
-         *        {callback: "(Function) Callback functimon used to apply changes"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function used to apply changes"},
-         *            {thisObject: "(Mixed) Specify the context on callback function"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.map"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to implement map",
+            "category": "Array",
+            "parameters":[
+                {"callback": "(Function) Callback function used to apply changes"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function used to apply changes"},
+                    {"thisObject": "(Mixed) Specify the context on callback function"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.map",
+            "returnType": "(Array)"
+        }|*/
         try {
             var thisObject = arguments[1] || this,
-            other= new Array(this.length);
+                other= new Array(this.length);
             for (var i= 0, n= this.length; i<n; i++)
                 if (i in this)
                     other[i]= callback.call(thisObject, this[i], i, this);
@@ -4376,14 +6764,42 @@ if (__thisIsNewer) {
             error("Array.map", e);
         }
     }, true);
+    _ext(Array, 'mapReduce', function(map, reduce, options) {
+        // TODO: implement mapReduce
+        /*|{
+         "info": "Array class extension to run map-reduce aggregation over records",
+         "category": "Array",
+         "parameters":[
+         {"condition": "(Mixed) Query following find/where clause syntax"},
+         {"condition": "(Mixed) Query following find/where clause syntax"}],
+
+         "overloads":[
+         {"parameters":[
+         {"condition": "(Mixed) Query following find/where clause syntax"},
+         {"projection": "(Mixed) Indicate which properties to return"},
+         {"projection": "(Mixed) Indicate which properties to return"}]}],
+
+         "description": "http://www.craydent.com/library/1.8.0/docs#array.mapReduce",
+         "returnType": "(Array)"
+         }|*/
+        try {
+
+        } catch (e) {
+            error("Array.mapReduce", e);
+            return false;
+        }
+    });
     _ext(Array, 'normalize', function () {
-        /*|  {info: "Array class extension to remove any non objects from the array",
-         *    category: "Array",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.normalize"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to normalize all properties in the object array",
+            "category": "Array",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.normalize",
+            "returnType": "(Array)"
+        }|*/
         try {
             var allProps = {}, arrObj = [], len = this.length, i;
             for(i = 0; i < len; i++) {
@@ -4407,19 +6823,20 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'remove', function (value, indexOf) {
-        /*|  {info: "Array class extension to remove an item by value",
-         *    category: "Array",
-         *    parameters:[
-         *        {value: "(Mixed) Value to remove"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {value: "(Mixed) Value to remove"},
-         *            {indexOf: "(Function) Callback function to use to find the item based on the value"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.remove"},
-         *    returnType: “(Mixed)”
-         * |*/
+        /*|{
+            "info": "Array class extension to remove an item by value",
+            "category": "Array",
+            "parameters":[
+                {"value": "(Mixed) Value to remove"}],
+
+            "overloads":[
+                {"parameters":[
+                {"value": "(Mixed) Value to remove"},
+                {"indexOf": "(Function) Callback function to use to find the item based on the value"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.remove",
+            "returnType": "(Mixed)"
+        }|*/
         try {
             indexOf = indexOf || this.indexOf;
             var index = indexOf.call(this, value);
@@ -4432,23 +6849,24 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'removeAll', function (value, indexOf) {
-        /*|  {info: "Array class extension to remove all items by value",
-         *    category: "Array",
-         *    parameters:[
-         *        {value: "(Mixed) Value to remove"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {value: "(Mixed) Value to remove"},
-         *            {indexOf: "(Function) Callback function to use to find the item based on thevalue"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.removeAll"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to remove all items by value",
+            "category": "Array",
+            "parameters":[
+                {"value": "(Mixed) Value to remove"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"value": "(Mixed) Value to remove"},
+                    {"indexOf": "(Function) Callback function to use to find the item based on thevalue"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.removeAll",
+            "returnType": "(Array)"
+        }|*/
         try {
             if (value) {
-                indexOf = indexOf || this.indexOf, removed = [];
-                var index = indexOf.call(this, value);
+                indexOf = indexOf || this.indexOf;
+                var  removed = [], index = indexOf.call(this, value);
                 if (index == -1) {
                     return false;
                 }
@@ -4465,16 +6883,17 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'removeAt', function (index) {
-        /*|  {info: "Array class extension to remove item at a specific index",
-         *    category: "Array",
-         *    parameters:[
-         *        {index: "(Int) Index of the item to remove"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.removeAt"},
-         *    returnType: “(Mixed)”
-         * |*/
+        /*|{
+            "info": "Array class extension to remove item at a specific index",
+            "category": "Array",
+            "parameters":[
+                {"index": "(Int) Index of the item to remove"}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.removeAt",
+            "returnType": "(Mixed)"
+        }|*/
         try {
-            if(!this[index]) {
+            if(this[index] === undefined) {
                 return false;
             }
             return this.splice(index, 1)[0];
@@ -4483,44 +6902,87 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Array, 'replaceAt', function(index, value) {
-        /*|  {info: "Array class extension to replace item at a specific index",
-         *    category: "Array",
-         *    parameters:[
-         *        {index: "(Int) Index of the item to remove"},
-         *        {value: "(Mixed) Value to replace with"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.replaceAt"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to replace item at a specific index",
+            "category": "Array",
+            "parameters":[
+                {"index": "(Int) Index of the item to remove"},
+                {"value": "(Mixed) Value to replace with"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.replaceAt",
+            "returnType": "(Array)"
+        }|*/
         try {
             return this.splice(index, 1, value)[0];
         } catch (e) {
             error("Array.replaceAt", e);
         }
     }, true);
-    //ARRAY SORTING
     _ext(Array, 'sortBy', function(props, rev, primer, lookup, options){
-        /*|  {info: "Array class extension to sort the array",
-         *    category: "Array",
-         *    parameters:[
-         *        {: ""},
-         *        {: ""},
-         *        {: ""}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {: ""},
-         *            {: ""},
-         *            {: ""}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.sortBy"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to sort the array",
+            "category": "Array",
+            "parameters":[
+                {"props": "(String) Property/Comma delimited list of properties to sort by. If the first character is '!', the sort order is reversed"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"props": "(Array) Properties to sort by. If the first character is '!', the sort order is reversed"}]},
+
+                {"parameters":[
+                    {"props": "(String) Property/Comma delimited list of properties to sort by. If the first character is '!', the sort order is reversed"},
+                    {"rev": "(Boolean) Flag to reverse the sort"}]},
+
+                {"parameters":[
+                    {"props": "(Array) Properties to sort by. If the first character is '!', the sort order is reversed"},
+                    {"rev": "(Boolean) Flag to reverse the sort"}]},
+
+                {"parameters":[
+                    {"props": "(String) Property/Comma delimited list of properties to sort by. If the first character is '!', the sort order is reversed"},
+                    {"rev": "(Boolean) Flag to reverse the sort"},
+                    {"primer": "(Function) Function to apply to values in the array."}]},
+
+                {"parameters":[
+                    {"props": "(Array) Properties to sort by. If the first character is '!', the sort order is reversed"},
+                    {"rev": "(Boolean) Flag to reverse the sort"},
+                    {"primer": "(Function) Function to apply to values in the array."}]},
+
+                {"parameters":[
+                    {"props": "(String) Property/Comma delimited list of properties to sort by. If the first character is '!', the sort order is reversed"},
+                    {"rev": "(Boolean) Flag to reverse the sort"},
+                    {"primer": "(Function) Function to apply to values in the array."},
+                    {"lookup": "(Object) Look up object to use as values instead of the array values."}]},
+
+                {"parameters":[
+                    {"props": "(Array) Properties to sort by. If the first character is '!', the sort order is reversed"},
+                    {"rev": "(Boolean) Flag to reverse the sort"},
+                    {"primer": "(Function) Function to apply to values in the array."},
+                    {"lookup": "(Object) Look up object to use as values instead of the array values."}]},,
+
+                {"parameters":[
+                    {"props": "(String) Property/Comma delimited list of properties to sort by. If the first character is '!', the sort order is reversed"},
+                    {"rev": "(Boolean) Flag to reverse the sort"},
+                    {"primer": "(Function) Function to apply to values in the array."},
+                    {"lookup": "(Object) Look up object to use as values instead of the array values."},
+                    {"options": "(Object) Options to pass. Valid options are:<br />i<br />ignoreCase"}]},
+
+                {"parameters":[
+                    {"props": "(Array) Properties to sort by. If the first character is '!', the sort order is reversed"},
+                    {"rev": "(Boolean) Flag to reverse the sort"},
+                    {"primer": "(Function) Function to apply to values in the array."},
+                    {"lookup": "(Object) Look up object to use as values instead of the array values."},
+                    {"options": "(Object) Options to pass. Valid options are:<br />i<br />ignoreCase"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.sortBy",
+            "returnType": "(Array)"
+        }|*/
         try {
             options = ($c.isString(options) && options in {"i":1,"ignoreCase":1}) ? {i:1} : {};
-            if($c.isString(props)){props=[props];}
-            var key = function (x) {return primer ? primer(x[prop]) : x[prop]};
-            primer = primer || function(x){return x;}
+            primer = primer || function(x){return x;};
+            if($c.isString(props)){ props = props.split(','); }
+            var key = function (x) { return primer(x[prop]); };
             var tmpVal;
             var prop_sort = function (a,b,p) {
                 p = p||0;
@@ -4533,16 +6995,12 @@ if (__thisIsNewer) {
                     reverseProp = true;
                 }
                 var aVal = primer((lookup && lookup[a][prop]) || a[prop]),
-                    bVal =primer( (lookup && lookup[b][prop]) || b[prop] );
+                    bVal = primer((lookup && lookup[b][prop]) || b[prop]);
 
                 if (options.i && aVal && bVal) {
                     aVal = aVal.toLowerCase();
                     bVal = bVal.toLowerCase();
                 }
-                //            tmpVal = aVal;
-                //            aVal = (parseInt(aVal) && aVal.toString() == tmpVal && tmpVal) || tmpVal;
-                //            tmpVal = bVal;
-                //            bVal = (parseInt(bVal) && bVal.toString() == tmpVal && tmpVal) || tmpVal;
                 tmpVal = aVal;
                 aVal = ((aVal = parseInt(aVal)) && aVal.toString() == tmpVal && parseInt(tmpVal)) || tmpVal;
                 tmpVal = bVal;
@@ -4551,8 +7009,8 @@ if (__thisIsNewer) {
 
 
                 if (aVal == bVal) {return prop_sort(a,b,p+1);}
-                if (aVal == undefined) {return 1;}
-                if (aVal == undefined) {return -1;}
+                if (isNull(aVal)) {return 1;}
+                if (isNull(bVal)) {return -1;}
                 if(!reverseProp) {
                     if (aVal > bVal) {return 1;}
                     return -1;
@@ -4570,63 +7028,42 @@ if (__thisIsNewer) {
             error('Array.sortBy', e);
         }
     }, true);
-    _ext(Array, 'sortByLookup', function(prop,lookup,rev,primer,options){
-        /*|  {info: "Array class extension to ",
-         *    category: "Array",
-         *    parameters:[
-         *        {: ""},
-         *        {: ""},
-         *        {: ""}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {: ""},
-         *            {: ""},
-         *            {: ""}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.sortByLookup"},
-         *    returnType: “(Array)”
-         * |*/
+    _ext(Array, 'toSet', function() {
+        /*|{
+            "info": "Array class extension to convert the array to a set",
+            "category": "Array",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.toSet",
+            "returnType": "(Array)"
+        }|*/
         try {
-            options = ($c.isString(options) && options in {"i":1,"ignoreCase":1}) ? {i:1} : {};
-            //prop="TABLE_SORT";
-            function orderByTable(a, b) {
-                var aVal = a[prop],
-                bVal = b[prop];
-                if (lookup) {
-                    aVal = lookup[a][prop];
-                    bVal = lookup[b][prop];
+            for (var i = 0,index; i < this.length - 1; i++) {
+                while ((index = this.indexOf(this[i],i+1)) != -1){
+                    this.removeAt(index);
                 }
-                if (options.i) {
-                    aVal = aVal.toLowerCase();
-                    bVal = bVal.toLowerCase();
-                }
-                aVal = parseFloat(aVal);
-                bVal = parseFloat(bVal);
-                if (aVal == bVal) {return 0;}
-                if (aVal > bVal) {return 1;}
-                return -1;
             }
-            this.sort(orderByTable);
-            if(rev){
-                this.reverse();
-            }
-            return this;
         } catch (e) {
-            error('Array.sortByLookup', e);
+            error("Array.toSet", e);
+            return false;
         }
     }, true);
     _ext(Array, 'trim', function(chars) {
-        /*|  {info: "Array class extension to remove all white space from the beginning and end of all string values in the array",
-         *    category: "Array",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.trim"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Array class extension to remove all white space from the beginning and end of all string values in the array",
+            "category": "Array",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.trim",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var arr = [],
-            alter = false;
+                alter = false;
             if ($c.isBoolean(chars)) {
                 alter = true;
             }
@@ -4641,194 +7078,32 @@ if (__thisIsNewer) {
             return false;
         }
     }, true);
-    _ext(Array, 'distinct', function(fields, condition) {
-        /*|  {info: "Array class extension to get all unique records by fields specified",
-         *    category: "Array",
-         *    parameters:[
-         *        {fields: "(Mixed) Fields to use as the projection and unique comparison"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {fields: "(Mixed) Fields to use as the projection and unique comparison"},
-         *            {condition: "(Mixed) Query following find/where clause syntax"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.distinct"},
-         *    returnType: “(Array)”
-         * |*/
-        try {
-            if ($c.isString(fields)) {
-                fields = [fields];
-            }
-
-//            var projection = {},len = fields.length;
-//            for (var i = 0; i < len; i++) {
-//                projection[fields[i]] = 1;
-//            }
-
-
-            return this.group(fields,condition);
-        } catch (e) {
-            error("Array.distinct", e);
-            return false;
-        }
-    });
-    _ext(Array, 'group', function(fields, condition, reduce, initial) { // params should be JSON
-        /*|  {info: "Array class extension to group records by fields",
-         *    category: "Array",
-         *    parameters:[
-         *        {params: "(Object) specs with common properties:<br />(Mixed) fields<br />(Mixed) condition"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.group"},
-         *    returnType: “(Array)”
-         * |*/
-
-/*         *    parameters:[
-            *        {fields: "(Mixed) Fields to use as the projection and to group by"}],
-            *
-            *    overloads:[
-            *        {parameters:[
-                *            {fields: "(Mixed) Fields to use as the projection and to group by"},
-                *            {condition: "(Mixed) Query following find/where clause syntax"}]},
-            *        {parameters:[
-                *            {fields: "(Mixed) Fields to use as the projection and to group by"},
-                *            {condition: "(Mixed) Query following find/where clause syntax"},
-                *            {reduce: "(Function) Method that operates on the records during the grouping operation"}]},
-            *        {parameters:[
-                *            {fields: "(Mixed) Fields to use as the projection and to group by"},
-                *            {condition: "(Mixed) Query following find/where clause syntax"},
-                *            {reduce: ""},
-                *            {initial: ""}]}],*/
-
-         try {
-            reduce = reduce || foo;
-            initial = initial || {};
-            if ($c.isString(fields)) {
-                fields = fields.split(',');
-            }
-            if ($c.isArray(fields)) {
-                var tmp = {};
-                for (var i = 0, len = fields.length; i < len; i++) {
-                    tmp[fields[i]] = 1;
-                }
-                fields = tmp;
-            }
-
-            var props = $c.keys(initial),
-                fields = $c.keys(fields);
-                arr = [], result = {};
-            _whereHelper(this, condition,function (obj, i) {
-                var prop = _groupFieldHelper(obj, fields), addit = false;
-                if (!result[prop]) {
-                    addit = true;
-                    var tmp = {};
-                    for (var i = 0, len = props.length; i < len; i++) {
-                        tmp[props[i]] = initial[props[i]];
-                    }
-                    result[prop] = tmp;
-                }
-                var curr = $c.duplicate(obj);
-                reduce(curr, result[prop]);
-                addit && arr.push(_copyWithProjection(fields, obj))
-                return true;
-            });
-
-            for (var i = 0, len = arr.length; i < len; i++) {
-                var prop = _groupFieldHelper(arr[i], fields);
-                arr[i] = $c.merge(arr[i],result[prop]);
-            }
-            return arr;
-        } catch (e) {
-            error("Array.group", e);
-            return false;
-        }
-    });
-    _ext(Array, 'mapReduce', function(map, reduce, options) {
-        /*|  {info: "Array class extension to run map-reduce aggregation over records",
-         *    category: "Array",
-         *    parameters:[
-         *        {condition: "(Mixed) Query following find/where clause syntax"},
-         *        {condition: "(Mixed) Query following find/where clause syntax"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {condition: "(Mixed) Query following find/where clause syntax"},
-         *            {projection: "(Mixed) Indicate which properties to return"},
-         *            {projection: "(Mixed) Indicate which properties to return"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.upsert"},
-         *    returnType: “(Array)”
-         * |*/
-        try {
-
-        } catch (e) {
-            error("Array.mapReduce", e);
-            return false;
-        }
-    });
-    _ext(Array, 'delete', function(condition, justOne) {
-        /*|  {info: "Array class extension to delete records",
-         *    category: "Array",
-         *    parameters:[
-         *        {condition: "(Mixed) Query following find/where clause syntax"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {condition: "(Mixed) Query following find/where clause syntax"},
-         *            {justOne: "(Boolean) Flag for deleting just one records [Default is: true]"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.delete"},
-         *    returnType: “(Array)”
-         * |*/
-        try {
-            justOne = parseBoolean(justOne === undefined ? true : isNull(justOne.justOne, justOne));
-            // if no condition was given, remove all
-            if (!condition) {
-                return this.splice(0,justOne ? 1 : this.length);
-            }
-
-            var arr = [], indexes = [];
-            _whereHelper(this, condition,function (obj, i) {
-                if (justOne) {
-                    arr = arr.concat(this.splice(i,1));
-                    return false
-                }
-                indexes.push(i);
-                return true;
-            });
-            for (var i = indexes.length - 1; i >= 0; i--) {
-                arr = this.splice(indexes[i],1).concat(arr);
-            }
-
-            return arr;
-        } catch (e) {
-            error("Array.delete", e);
-            return false;
-        }
-    }, true);
     _ext(Array, 'update', function(condition, setClause, multi) {
-        /*|  {info: "Array class extension to ",
-         *    category: "Array",
-         *    parameters:[
-         *        {condition: "(Mixed) Query following find/where clause syntax"},
-         *        {setClause: "(Mixed) Set clause used to update the records"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {condition: "(Mixed) Query following find/where clause syntax"},
-         *            {setClause: "(Mixed) Set clause used to update the records"},
-         *            {multi: "(Mixed) Flag to specifiy if multiple records should be updated"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.update"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to update records in the array",
+            "category": "Array",
+            "parameters":[
+                {"condition": "(Mixed) Query following find/where clause syntax"},
+                {"setClause": "(Mixed) Set clause used to update the records"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"condition": "(Mixed) Query following find/where clause syntax"},
+                    {"setClause": "(Mixed) Set clause used to update the records"},
+                    {"multi": "(Mixed) Flag to specify if multiple records should be updated"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.update",
+            "returnType": "(Array)"
+        }|*/
         try {
             // if sql syntax convert to mongo object syntax
             if ($c.isString(condition)) {
                 condition = _processClause(condition);
             }
+            var setObject = {'$set':null};
             if ($c.isString(setClause)) {
                 setClause = setClause.split(',');
-                var setObject = {'$set':{}};
+                setObject['$set'] = {};
                 for (var i = 0, len = setClause.length; i < len; i++) {
                     var keyVal = setClause[i].split("=");
                     setObject['$set'][_trim(keyVal[0])] = _trim(keyVal[0]);
@@ -4852,44 +7127,44 @@ if (__thisIsNewer) {
                     this.splice(i,1,setObject);
                 }
                 for (var prop in (setObject['$set'] || {})) {
-                    setObject['$set'].hop(prop) && obj.setProperty(prop, setObject['$set'][prop]);
+                    setObject['$set'].has(prop) && obj.setProperty(prop, setObject['$set'][prop]);
                 }
                 if (setObject['$unset']) {
                     for (var prop in setObject['$unset']) {
-                        setObject['$unset'].hop(prop) && delete obj[prop];
+                        setObject['$unset'].has(prop) && delete obj[prop];
                     }
                 }
                 if (setObject['$currentDate']) {
                     for (var prop in setObject['$currentDate']) {
-                        setObject['$currentDate'].hop(prop) && (obj[prop] = new Date());
+                        setObject['$currentDate'].has(prop) && (obj[prop] = new Date());
                     }
                 }
                 if (setObject['$inc']) {
                     for (var prop in setObject['$inc']) {
-                        setObject['$inc'].hop(prop) && (obj[prop] += setObject['$inc'][prop]);
+                        setObject['$inc'].has(prop) && (obj[prop] += setObject['$inc'][prop]);
                     }
                 }
                 if (setObject['$max']) {
                     for (var prop in setObject['$max']) {
                         var value = obj[prop];
-                        setObject['$max'].hop(prop) && value < setObject['$max'][prop] && (obj[prop] = setObject['$max'][prop]);
+                        setObject['$max'].has(prop) && value < setObject['$max'][prop] && (obj[prop] = setObject['$max'][prop]);
                     }
                 }
                 if (setObject['$min']) {
                     var value = obj[prop];
                     for (var prop in setObject['$min']) {
                         var value = obj[prop];
-                        setObject['$min'].hop(prop) && value > setObject['$min'][prop] && (obj[prop] = setObject['$min'][prop]);
+                        setObject['$min'].has(prop) && value > setObject['$min'][prop] && (obj[prop] = setObject['$min'][prop]);
                     }
                 }
                 if (setObject['$mul']) {
                     for (var prop in setObject['$mul']) {
-                        setObject['$mul'].hop(prop) && (obj[prop] *= setObject['$mul'][prop]);
+                        setObject['$mul'].has(prop) && (obj[prop] *= setObject['$mul'][prop]);
                     }
                 }
                 if (setObject['$bit']) {
                     for (var prop in setObject['$bit']) {
-                        if (!setObject['$bit'].hop(prop) || !$c.isInt(obj[prop])) {continue;}
+                        if (!setObject['$bit'].has(prop) || !$c.isInt(obj[prop])) {continue;}
                         if ($c.isInt(setObject['$bit'][prop]['and'])) {
                             obj[prop] &= setObject['$bit'][prop]['and'];
                         } else if ($c.isInt(setObject['$bit'][prop]['or'])) {
@@ -4902,14 +7177,11 @@ if (__thisIsNewer) {
                 if (setObject['$rename']) {
                     for (var prop in setObject['$rename']) {
                         var value = obj[prop];
-                        setObject['$rename'].hop(prop) && delete obj[prop] && (obj[setObject['$rename'][prop]] = value);
+                        setObject['$rename'].has(prop) && delete obj[prop] && (obj[setObject['$rename'][prop]] = value);
                     }
                 }
 
-                if (!multi || !multi.multi) {
-                    return false;
-                }
-                return true;
+                return  !(!multi || !multi.multi);
             });
 
             if (!found && multi && multi.upsert && plainObject) {
@@ -4922,28 +7194,28 @@ if (__thisIsNewer) {
             return false;
         }
     }, true);
-
     _ext(Array, 'upsert', function(records, prop, callback) {
-        /*|  {info: "Array class extension to upsert records to array",
-         *    category: "Array",
-         *    parameters:[
-         *        {records: "(Array) Records to use to insert/update array"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {records: "(Array) Records to use to insert/update array"},
-         *            {callback: "(Function) Method to use to determine if the records are equal"}]},
-         *        {parameters:[
-         *            {records: "(Array) Records to use to insert/update array"},
-         *            {prop: "(String) Property to use as the primary key"}]},
-         *        {parameters:[
-         *            {records: "(Array) Records to use to insert/update array"},
-         *            {prop: "(String) Property to use as the primary key"},
-         *            {callback: "(Function) Method to use to determine if the records are equal"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.upsert"},
-         *    returnType: “(Object)”
-         * |*/
+        /*|{
+            "info": "Array class extension to upsert records to array",
+            "category": "Array",
+            "parameters":[
+                {"records": "(Array) Records to use to insert/update array"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"records": "(Array) Records to use to insert/update array"},
+                    {"callback": "(Function) Method to use to determine if the records are equal"}]},
+                {"parameters":[
+                    {"records": "(Array) Records to use to insert/update array"},
+                    {"prop": "(String) Property to use as the primary key"}]},
+                {"parameters":[
+                    {"records": "(Array) Records to use to insert/update array"},
+                    {"prop": "(String) Property to use as the primary key"},
+                    {"callback": "(Function) Method to use to determine if the records are equal"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.upsert",
+            "returnType": "(Object)"
+        }|*/
         try {
             prop = prop || "_id";
             callback = callback || foo;
@@ -4967,7 +7239,7 @@ if (__thisIsNewer) {
                     isEqual = callback(obj,record),
                     index = uIndex,
                     arr = uArr;
-                if (isEqual !== undefined ? isEqual : $c.equals(record,obj)) {
+                if (!isNull(isEqual) ? isEqual : $c.equals(record,obj)) {
                     index = sIndex;
                     arr = sArr;
                 } else {
@@ -4995,29 +7267,31 @@ if (__thisIsNewer) {
                 unchanged:sArr
             };
         } catch (e) {
-            error("Array.update", e);
+            error("Array.upsert", e);
             return false;
         }
     }, true);
     _ext(Array, 'where', function(condition, projection) {
-        /*|  {info: "Array class extension to use mongo or sql queries",
-         *    category: "Array",
-         *    parameters:[
-         *        {condition: "(Mixed) Query following find/where clause syntax"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {condition: "(Mixed) Query following find/where clause syntax"},
-         *            {projection: "(Mixed) Indicate which properties to return"}]},
-         *        {parameters:[
-         *            {condition: "(Mixed) Query following find/where clause syntax"},
-         *            {useReference: "(Bool) Flag to make a copy instead of using references"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.where"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Array class extension to use mongo or sql queries",
+            "category": "Array",
+            "featured": true,
+            "parameters":[
+                {"condition": "(Mixed) Query following find/where clause syntax"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"condition": "(Mixed) Query following find/where clause syntax"},
+                    {"projection": "(Mixed) Indicate which properties to return"}]},
+                {"parameters":[
+                    {"condition": "(Mixed) Query following find/where clause syntax"},
+                    {"useReference": "(Bool) Flag to make a copy instead of using references"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.where",
+            "returnType": "(Array)"
+        }|*/
         try {
-            var useReference =  true
+            var useReference =  true;
             if (arguments.length == 2 && $c.isBoolean(projection)) {
                 useReference = $c.isBoolean(projection);
             }
@@ -5030,20 +7304,20 @@ if (__thisIsNewer) {
             // check if there is query MongoDB syntax
             if (!projection && !/"\$or":|"\$and":|"\$in":|"\$nin":|"\$regex":|"\$gt":|"\$lt":|"\$gte":|"\$lte":|"\$exists":|"\$equals":|"\$ne":|"\$nor":|"\$type":|"\$text":|"\$mod":|"\$all":|"\$size":|"\$where":|"\$elemMatch":|"\$not":/.test(JSON.stringify(condition))) {
                 var props=[],
-                    ncheck = function (o,c,p) {return o[p.prop] != c[p.prop]},
-                    rcheck = function (o,c,p) {return ncheck(o,c,p) && p.isReg && !c[p.prop].test(o[p.prop])},
+                    ncheck = function (o,c,p) {return $c.getProperty(o,p.prop) != c[p.prop]},
+                    rcheck = function (o,c,p) {return ncheck(o,c,p) && p.isReg && !c[p.prop].test($c.getProperty(o,p.prop))},
                     check = ncheck;
                 for (var p in condition) {
                     var isReg = false;
                     if (condition.hasOwnProperty(p)) {
-                        if (condition[p].constructor == RegExp) {
+                        if ($c.isRegExp(condition[p])) {
                             isReg = true;
                             check = rcheck;
                         }
                         props.push({prop:p,isReg:isReg});
                     }
                 }
-                
+
                 return this.filter(function (obj) {
                     var j = 0, prop;
                     while (prop = props[j++]) {
@@ -5068,22 +7342,24 @@ if (__thisIsNewer) {
     }, true);
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Date class Extensions
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	Date class Extensions
+     /---------------------------------------------------------------------------------------------------------------*/
     _ext(Date, 'format', function (format, options) {
-        /*|  {info: "Date class extension to convert to formatted string",
-         *    category: "Date",
-         *    parameters:[
-         *        {format: "(String) Format syntax to use to to format date"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {format: "(String) Format syntax to use to to format date"},
-         *            {options: "(Object) specs with optional properties:<br />(Bool) gmt<br />(Int) offset]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#date.format"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "Date class extension to convert to formatted string",
+            "category": "Date",
+            "featured": true,
+            "parameters":[
+                {"format": "(String) Format syntax to use to to format date"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"format": "(String) Format syntax to use to to format date"},
+                    {"options": "(Object) specs with optional properties:<br />(Bool) gmt<br />(Int) offset]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#date.format",
+            "returnType": "(String)"
+        }|*/
         try {
             if(!$c.isValidDate(this)) {
                 return;
@@ -5095,155 +7371,155 @@ if (__thisIsNewer) {
              *  offset:offset from GMT
              **/
             var localTimeZoneOffset = _getGMTOffset.call(this),
-            datetime = options.offset ? new Date(this.valueOf() - (options.offset + (options.offset ? -1 : 1) * localTimeZoneOffset)*60*60000) : this,
-            minute = datetime.getMinutes(),
-            second = datetime.getSeconds(),
-            GMTDiff = options.offset || datetime.getHours() - 24 - datetime.getUTCHours(),
-            epoch = datetime.getTime(),
-            timezones = {
-                'Afghanistan Time':'AFT',
-                'AIX specific equivalent of Central European Time':'DFT',
-                'Alaska Daylight Time':'AKDT',
-                'Alaska Standard Time':'AKST',
-                'Arab Standard Time (Kuwait, Riyadh)':'AST',
-                'Arabian Standard Time (Abu Dhabi, Muscat)':'AST',
-                'Arabic Standard Time (Baghdad)':'AST',
-                'Argentina Time':'ART',
-                'Armenia Summer Time':'AMST',
-                'Armenia Time':'AMT',
-                'ASEAN Common Time':'ACT',
-                'Atlantic Daylight Time':'ADT',
-                'Atlantic Standard Time':'AST',
-                'Australian Central Daylight Time':'ACDT',
-                'Australian Central Standard Time':'ACST',
-                'Australian Eastern Daylight Time':'AEDT',
-                'Australian Eastern Standard Time':'AEST',
-                'Australian Western Daylight Time':'AWDT',
-                'Australian Western Standard Time':'AWST',
-                'Azerbaijan Time':'AZT',
-                'Azores Standard Time':'AZOST',
-                'Baker Island Time':'BIT',
-                'Bangladesh Standard Time':'BST',
-                'Bhutan Time':'BTT',
-                'Bolivia Time':'BOT',
-                'Brasilia Time':'BRT',
-                'British Indian Ocean Time':'BIOT',
-                'British Summer Time (British Standard Time from Feb 1968 to Oct 1971)':'BST',
-                'Brunei Time':'BDT',
-                'Cape Verde Time':'CVT',
-                'Central Africa Time':'CAT',
-                'Central Daylight Time (North America)':'CDT',
-                'Central European Daylight Time':'CEDT',
-                'Central European Summer Time (Cf. HAEC)':'CEST',
-                'Central European Time':'CET',
-                'Central Standard Time (Australia)':'CST',
-                'Central Standard Time (North America)':'CST',
-                'Chamorro Standard Time':'CHST',
-                'Chatham Daylight Time':'CHADT',
-                'Chatham Standard Time':'CHAST',
-                'Chile Standard Time':'CLT',
-                'Chile Summer Time':'CLST',
-                'China Standard Time':'CST',
-                'China Time':'CT',
-                'Christmas Island Time':'CXT',
-                'Clipperton Island Standard Time':'CIST',
-                'Cocos Islands Time':'CCT',
-                'Colombia Summer Time':'COST',
-                'Colombia Time':'COT',
-                'Cook Island Time':'CKT',
-                'Coordinated Universal Time':'UTC',
-                'East Africa Time':'EAT',
-                'Easter Island Standard Time':'EAST',
-                'Eastern Caribbean Time (does not recognise DST)':'ECT',
-                'Eastern Daylight Time (North America)':'EDT',
-                'Eastern European Daylight Time':'EEDT',
-                'Eastern European Summer Time':'EEST',
-                'Eastern European Time':'EET',
-                'Eastern Standard Time (North America)':'EST',
-                'Ecuador Time':'ECT',
-                'Falkland Islands Summer Time':'FKST',
-                'Falkland Islands Time':'FKT',
-                'Fiji Time':'FJT',
-                'French Guiana Time':'GFT',
-                'Further-eastern_European_Time':'FET',
-                'Galapagos Time':'GALT',
-                'Gambier Island Time':'GIT',
-                'Georgia Standard Time':'GET',
-                'Gilbert Island Time':'GILT',
-                'Greenwich Mean Time':'GMT',
-                'Gulf Standard Time':'GST',
-                'Guyana Time':'GYT',
-                'Hawaii Standard Time':'HST',
-                'Hawaii-Aleutian Daylight Time':'HADT',
-                'Hawaii-Aleutian Standard Time':'HAST',
-                'Heard and McDonald Islands Time':'HMT',
-                'Heure AvancÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©e d\'Europe Centrale francised name for CEST':'HAEC',
-                'Hong Kong Time':'HKT',
-                'Indian Standard Time':'IST',
-                'Indochina Time':'ICT',
-                'Iran Standard Time':'IRST',
-                'Irish Summer Time':'IST',
-                'Irkutsk Time':'IRKT',
-                'Israel Standard Time':'IST',
-                'Israeli Daylight Time':'IDT',
-                'Japan Standard Time':'JST',
-                'Kamchatka Time':'PETT',
-                'Korea Standard Time':'KST',
-                'Krasnoyarsk Time':'KRAT',
-                'Line Islands Time':'LINT',
-                'Lord Howe Standard Time':'LHST',
-                'Magadan Time':'MAGT',
-                'Malaysia Time':'MYT',
-                'Malaysian Standard Time':'MST',
-                'Marquesas Islands Time':'MIT',
-                'Mauritius Time':'MUT',
-                'Middle European Saving Time Same zone as CEST':'MEST',
-                'Middle European Time Same zone as CET':'MET',
-                'Moscow Standard Time':'MSK',
-                'Moscow Summer Time':'MSD',
-                'Mountain Daylight Time (North America)':'MDT',
-                'Mountain Standard Time (North America)':'MST',
-                'Myanmar Standard Time':'MST',
-                'Nepal Time':'NPT',
-                'New Zealand Daylight Time':'NZDT',
-                'New Zealand Standard Time':'NZST',
-                'Newfoundland Daylight Time':'NDT',
-                'Newfoundland Standard Time':'NST',
-                'Newfoundland Time':'NT',
-                'Norfolk Time<sup id="cite_ref-0" class="reference"><span>[</span>1<span>]</span></sup>':'NFT',
-                'Omsk Time':'OMST',
-                'Pacific Daylight Time (North America)':'PDT',
-                'Pacific Standard Time (North America)':'PST',
-                'Pakistan Standard Time':'PKT',
-                'Philippine Standard Time':'PST',
-                'Phoenix Island Time':'PHOT',
-                'RÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©union Time':'RET',
-                'Samara Time':'SAMT',
-                'Samoa Standard Time':'SST',
-                'Seychelles Time':'SCT',
-                'Singapore Standard Time':'SST',
-                'Singapore Time':'SGT',
-                'Solomon Islands Time':'SBT',
-                'South African Standard Time':'SAST',
-                'South Georgia and the South Sandwich Islands':'GST',
-                'Sri Lanka Time':'SLT',
-                'Tahiti Time':'TAHT',
-                'Thailand Standard Time':'THA',
-                'Uruguay Standard Time':'UYT',
-                'Uruguay Summer Time':'UYST',
-                'Venezuelan Standard Time':'VET',
-                'Vladivostok Time':'VLAT',
-                'West Africa Time':'WAT',
-                'Western European Daylight Time':'WEDT',
-                'Western European Summer Time':'WEST',
-                'Western European Time':'WET',
-                'Western Standard Time':'WST',
-                'Yakutsk Time':'YAKT',
-                'Yekaterinburg Time':'YEKT'
-            },
-            currentTimezone = datetime.toTimeString().replace(/.*?\((.*?)\).*?/, '$1'),
-            minuteWithZero = (minute < 10 ? "0" + minute : minute),
-            secondsWithZero = (second < 10 ? "0" + second : second);
+                datetime = options.offset ? new Date(this.valueOf() - (options.offset + (options.offset ? -1 : 1) * localTimeZoneOffset)*60*60000) : this,
+                minute = datetime.getMinutes(),
+                second = datetime.getSeconds(),
+                GMTDiff = options.offset || datetime.getHours() - 24 - datetime.getUTCHours(),
+                epoch = datetime.getTime(),
+                timezones = {
+                    'Afghanistan Time':'AFT',
+                    'AIX specific equivalent of Central European Time':'DFT',
+                    'Alaska Daylight Time':'AKDT',
+                    'Alaska Standard Time':'AKST',
+                    'Arab Standard Time (Kuwait, Riyadh)':'AST',
+                    'Arabian Standard Time (Abu Dhabi, Muscat)':'AST',
+                    'Arabic Standard Time (Baghdad)':'AST',
+                    'Argentina Time':'ART',
+                    'Armenia Summer Time':'AMST',
+                    'Armenia Time':'AMT',
+                    'ASEAN Common Time':'ACT',
+                    'Atlantic Daylight Time':'ADT',
+                    'Atlantic Standard Time':'AST',
+                    'Australian Central Daylight Time':'ACDT',
+                    'Australian Central Standard Time':'ACST',
+                    'Australian Eastern Daylight Time':'AEDT',
+                    'Australian Eastern Standard Time':'AEST',
+                    'Australian Western Daylight Time':'AWDT',
+                    'Australian Western Standard Time':'AWST',
+                    'Azerbaijan Time':'AZT',
+                    'Azores Standard Time':'AZOST',
+                    'Baker Island Time':'BIT',
+                    'Bangladesh Standard Time':'BST',
+                    'Bhutan Time':'BTT',
+                    'Bolivia Time':'BOT',
+                    'Brasilia Time':'BRT',
+                    'British Indian Ocean Time':'BIOT',
+                    'British Summer Time (British Standard Time from Feb 1968 to Oct 1971)':'BST',
+                    'Brunei Time':'BDT',
+                    'Cape Verde Time':'CVT',
+                    'Central Africa Time':'CAT',
+                    'Central Daylight Time (North America)':'CDT',
+                    'Central European Daylight Time':'CEDT',
+                    'Central European Summer Time (Cf. HAEC)':'CEST',
+                    'Central European Time':'CET',
+                    'Central Standard Time (Australia)':'CST',
+                    'Central Standard Time (North America)':'CST',
+                    'Chamorro Standard Time':'CHST',
+                    'Chatham Daylight Time':'CHADT',
+                    'Chatham Standard Time':'CHAST',
+                    'Chile Standard Time':'CLT',
+                    'Chile Summer Time':'CLST',
+                    'China Standard Time':'CST',
+                    'China Time':'CT',
+                    'Christmas Island Time':'CXT',
+                    'Clipperton Island Standard Time':'CIST',
+                    'Cocos Islands Time':'CCT',
+                    'Colombia Summer Time':'COST',
+                    'Colombia Time':'COT',
+                    'Cook Island Time':'CKT',
+                    'Coordinated Universal Time':'UTC',
+                    'East Africa Time':'EAT',
+                    'Easter Island Standard Time':'EAST',
+                    'Eastern Caribbean Time (does not recognise DST)':'ECT',
+                    'Eastern Daylight Time (North America)':'EDT',
+                    'Eastern European Daylight Time':'EEDT',
+                    'Eastern European Summer Time':'EEST',
+                    'Eastern European Time':'EET',
+                    'Eastern Standard Time (North America)':'EST',
+                    'Ecuador Time':'ECT',
+                    'Falkland Islands Summer Time':'FKST',
+                    'Falkland Islands Time':'FKT',
+                    'Fiji Time':'FJT',
+                    'French Guiana Time':'GFT',
+                    'Further-eastern_European_Time':'FET',
+                    'Galapagos Time':'GALT',
+                    'Gambier Island Time':'GIT',
+                    'Georgia Standard Time':'GET',
+                    'Gilbert Island Time':'GILT',
+                    'Greenwich Mean Time':'GMT',
+                    'Gulf Standard Time':'GST',
+                    'Guyana Time':'GYT',
+                    'Hawaii Standard Time':'HST',
+                    'Hawaii-Aleutian Daylight Time':'HADT',
+                    'Hawaii-Aleutian Standard Time':'HAST',
+                    'Heard and McDonald Islands Time':'HMT',
+                    'Heure Avancée d\'Europe Centrale francised name for CEST':'HAEC',
+                    'Hong Kong Time':'HKT',
+                    'Indian Standard Time':'IST',
+                    'Indochina Time':'ICT',
+                    'Iran Standard Time':'IRST',
+                    'Irish Summer Time':'IST',
+                    'Irkutsk Time':'IRKT',
+                    'Israel Standard Time':'IST',
+                    'Israeli Daylight Time':'IDT',
+                    'Japan Standard Time':'JST',
+                    'Kamchatka Time':'PETT',
+                    'Korea Standard Time':'KST',
+                    'Krasnoyarsk Time':'KRAT',
+                    'Line Islands Time':'LINT',
+                    'Lord Howe Standard Time':'LHST',
+                    'Magadan Time':'MAGT',
+                    'Malaysia Time':'MYT',
+                    'Malaysian Standard Time':'MST',
+                    'Marquesas Islands Time':'MIT',
+                    'Mauritius Time':'MUT',
+                    'Middle European Saving Time Same zone as CEST':'MEST',
+                    'Middle European Time Same zone as CET':'MET',
+                    'Moscow Standard Time':'MSK',
+                    'Moscow Summer Time':'MSD',
+                    'Mountain Daylight Time (North America)':'MDT',
+                    'Mountain Standard Time (North America)':'MST',
+                    'Myanmar Standard Time':'MST',
+                    'Nepal Time':'NPT',
+                    'New Zealand Daylight Time':'NZDT',
+                    'New Zealand Standard Time':'NZST',
+                    'Newfoundland Daylight Time':'NDT',
+                    'Newfoundland Standard Time':'NST',
+                    'Newfoundland Time':'NT',
+                    'Norfolk Time':'NFT',
+                    'Omsk Time':'OMST',
+                    'Pacific Daylight Time (North America)':'PDT',
+                    'Pacific Standard Time (North America)':'PST',
+                    'Pakistan Standard Time':'PKT',
+                    'Philippine Standard Time':'PST',
+                    'Phoenix Island Time':'PHOT',
+                    'Reunion Time':'RET',
+                    'Samara Time':'SAMT',
+                    'Samoa Standard Time':'SST',
+                    'Seychelles Time':'SCT',
+                    'Singapore Standard Time':'SST',
+                    'Singapore Time':'SGT',
+                    'Solomon Islands Time':'SBT',
+                    'South African Standard Time':'SAST',
+                    'South Georgia and the South Sandwich Islands':'GST',
+                    'Sri Lanka Time':'SLT',
+                    'Tahiti Time':'TAHT',
+                    'Thailand Standard Time':'THA',
+                    'Uruguay Standard Time':'UYT',
+                    'Uruguay Summer Time':'UYST',
+                    'Venezuelan Standard Time':'VET',
+                    'Vladivostok Time':'VLAT',
+                    'West Africa Time':'WAT',
+                    'Western European Daylight Time':'WEDT',
+                    'Western European Summer Time':'WEST',
+                    'Western European Time':'WET',
+                    'Western Standard Time':'WST',
+                    'Yakutsk Time':'YAKT',
+                    'Yekaterinburg Time':'YEKT'
+                },
+                currentTimezone = datetime.toTimeString().replace(/.*?\((.*?)\).*?/, '$1'),
+                minuteWithZero = (minute < 10 ? "0" + minute : minute),
+                secondsWithZero = (second < 10 ? "0" + second : second);
 
             if (options.gmt) {
                 datetime = new Date(datetime.valueOf() - localTimeZoneOffset*60*60000);
@@ -5252,79 +7528,127 @@ if (__thisIsNewer) {
             }
 
             var date = datetime.getDate(),
-            day = datetime.getDay();
-            month = datetime.getMonth() + 1;
-            year = datetime.getFullYear();
-            firstMonday = new Date((new Date('1/6/' + year)).getTime() + (1-(new Date('1/6/' + year)).getDay())*(24*60*60*1000));
-            week = Math.ceil(Math.ceil((datetime - (firstMonday - (new Date('1/1/'+year)))) - (new Date('12/31/' + (year - 1))))/(7*24*60*60*1000));
-            hour = datetime.getHours();
+                day = datetime.getDay(),
+                month = datetime.getMonth() + 1,
+                year = datetime.getFullYear(),
+                firstMonday = new Date((new Date('1/6/' + year)).getTime() + (1-(new Date('1/6/' + year)).getDay())*(24*60*60*1000)),
+                //week = Math.ceil(Math.ceil((datetime - (firstMonday - (new Date('1/1/'+year)))) - (new Date('12/31/' + (year - 1))))/(7*24*60*60*1000)),
+                week = datetime.getWeek() - 1,
+                hour = datetime.getHours(),
+                dayOfYear = datetime.getDayOfYear(),
+                dayOfYearFrom1 = dayOfYear + 1,
+                dayOfYearWithZero = (dayOfYearFrom1< 10 ? "00" + dayOfYearFrom1 : (dayOfYearFrom1 < 100 ? "0" + dayOfYearFrom1 : dayOfYearFrom1)),
 
-            dateWithZero = (date < 10 ? "0" + date : date);
-            threeLetterDay = ['\\S\\u\\n','\\M\\o\\n','\\T\\u\\e\\s','\\W\\e\\d','\\T\\h\\u','\\F\\r\\i', '\\S\\a\\t'][day];
-            threeLetterMonth = ['\\J\\a\\n','\\F\\e\\b','\\M\\a\\r','\\A\\p\\r','\\M\\a\\y','\\J\\u\\n','\\J\\u\\l','\\A\\u\\g','\\S\\e\\p','\\O\\c\\t','\\N\\o\\v','\\D\\e\\c'][month - 1];
-            hour24 = (hour < 10 ? "0" + hour : hour),
-            GMTDiffFormatted = (GMTDiff > 0 ? "+" : "-") + (Math.abs(GMTDiff) < 10 ? "0" : "") + Math.abs(GMTDiff) + "00";
-
-
-
-            return /*option d*/format.replace(/([^\\])d|^d/g, '$1' + dateWithZero).// replace all d's with the 2 digit day leading 0
-            /*option D*/replace(/([^\\])D|^D/g, '$1' + threeLetterDay).// replace all D's with A textual representation of a day, three letters
-            /*option j*/replace(/([^\\])j|^j/g, '$1' + date).// replace all j's with the day without leading 0
-            /*option l*/replace(/([^\\])l|^l/g, '$1' + ['\\S\\u\\n\\d\\a\\y','\\M\\o\\n\\d\\a\\y','\\T\\u\\e\\s\\d\\a\\y','\\W\\e\\d\\n\\e\\s\\d\\a\\y','\\T\\h\\u\\r\\s\\d\\a\\y','\\F\\r\\i\\d\\a\\y', '\\S\\a\\t\\u\\r\\d\\a\\y'][day]).// replace all l's (lower case L) with A full textual representation of the day of the week
-            /*option N*/replace(/([^\\])N|^N/g, '$1' + (day == 0 ? 7 : day)).// replace all N's with ISO-8601 numeric representation of the day of the week
-            /*option S*/replace(/([^\\])S|^S/g, '$1' + (date > 3 ? '\\t\\h' : (date == 1 ? '\\s\\t' : (date == 2 ? '\\n\\d' : '\\r\\d')))).// replace all S's with English ordinal suffix for the day of the month, 2 characters
-            /*option w*/replace(/([^\\])w|^w/g, '$1' + day).// replace all w's with Numeric representation of the day of the week
-            /*option z*/replace(/([^\\])z|^z/g, '$1' + Math.ceil(Math.ceil(datetime - (new Date('12/31/' + (year - 1))))/(24*60*60*1000)) - 1).// replace all z's with The day of the year (starting from 0)
-
-            /*option W*/replace(/([^\\])W|^W/g, '$1' + (week > 0 ? week : 52)).// replace all W's with ISO-8601 week number of the year, weeks staring on Monday
-
-            /*option F*/replace(/([^\\])F|^F/g, '$1' + ['\\J\\a\\n\\u\\a\\r\\y','\\F\\e\\b\\r\\u\\a\\r\\y','\\M\\a\\r\\c\\h','\\A\\p\\r\\i\\l','\\M\\a\\y','\\J\\u\\n\\e','\\J\\u\\l\\y','\\A\\u\\g\\u\\s\\t','\\S\\e\\p\\t\\e\\m\\b\\e\\r','\\O\\c\\t\\o\\b\\e\\r','\\N\\o\\v\\e\\m\\b\\e\\r','\\D\\e\\c\\e\\m\\b\\e\\r'][month - 1]).// replace all F's with A full textual representation of a month, such as January or March
-            /*option m*/replace(/([^\\])m|^m/g, '$1' + (month < 10 ? "0" + month : month)).// replace all m's with Numeric representation of a month, with leading zeros
-            /*option M*/replace(/([^\\])M|^M/g, '$1' + threeLetterMonth).// replace all M's with A short textual representation of a month, three letters
-            /*option n*/replace(/([^\\])n|^n/g, '$1' + month).// replace all n's with Numeric representation of a month, without leading zeros
-            /*option t*/replace(/([^\\])t|^t/g, '$1' + (month == 2 && $c.isInt(year/4) ? 29 :[31,28,31,30,31,30,31,31,30,31,30,31][month - 1])).// replace all t's with Number of days in the given month
-
-            /*option L*/replace(/([^\\])L|^L/g, '$1' + $c.isInt(year/4) ? 0 : 1).//replace all t's with Whether it's a leap year
-            /*option o*/replace(/([^\\])o|^o/g, '$1' + (week > 0 ? year : year - 1)).//replace all o's with A full numeric representation of a year, 4 digits.  If 'W' belongs to the previous or next year, that year is used instead.
-            /*option Y*/replace(/([^\\])Y|^Y/g, '$1' + year).//replace all t's with A full numeric representation of a year, 4 digits
-            /*option y*/replace(/([^\\])y|^y/g, '$1' + year.toString().substring(year.toString().length - 2)).//replace all t's with A two digit representation of a year
-
-            /*option a*/replace(/([^\\])a|^a/g, '$1' + (hour > 11 ? "\\p\\m" : "\\a\\m")).//replace all a's with Lowercase Ante meridiem and Post meridiem
-            /*option A*/replace(/([^\\])A|^A/g, '$1' + (hour > 11 ? "\\P\\M" : "\\A\\M")).//replace all A's with Uppercase Ante meridiem and Post meridiem
-            /*option B*/replace(/([^\\])B|^B/g, '$1' + Math.floor((((datetime.getUTCHours() + 1)%24) + datetime.getUTCMinutes()/60 + datetime.getUTCSeconds()/3600)*1000/24)).//replace all B's with Swatch Internet time
-            /*option g*/replace(/([^\\])g|^g/g, '$1' + (hour == 0 ? 12 : hour > 12 ? hour - 12 : hour)).//replace all g's with 12-hour format of an hour without leading zeros
-            /*option G*/replace(/([^\\])G|^G/g, '$1' + hour).//replace all G's with 24-hour format of an hour without leading zeros
-            /*option h*/replace(/([^\\])h|^h/g, '$1' + (hour < 10 ? "0" + hour : (hour > 12 && hour - 12 < 10) ? "0" + (hour - 12) : hour)).//replace all h's with 12-hour format of an hour with leading zeros
-            /*option H*/replace(/([^\\])H|^H/g, '$1' + hour24).//replace all H's with 24-hour format of an hour with leading zeros
-            /*option i*/replace(/([^\\])i|^i/g, '$1' + minuteWithZero).//replace all i's with Minutes with leading zeros
-            /*option s*/replace(/([^\\])s|^s/g, '$1' + secondsWithZero).//replace all s's with Seconds, with leading zeros
-            /*option u*/replace(/([^\\])u|^u/g, '$1' + epoch*1000).//replace all u's with Microseconds
-
-            /*option e*/replace(/([^\\])e|^e/g, '$1' + currentTimezone).//replace all e's with Timezone identifier
-            /*option I*/replace(/([^\\])I|^I/g, '$1' + Math.max((new Date(datetime.getFullYear(), 0, 1)).getTimezoneOffset(), (new Date(datetime.getFullYear(), 6, 1)).getTimezoneOffset()) > datetime.getTimezoneOffset() ? 1 : 0).//replace all I's with Whether or not the date is in daylight saving time
-
-            /*option O*/replace(/([^\\])O|^O/g, '$1' + GMTDiffFormatted).//replace all O's with Difference to Greenwich time (GMT) in hours
-            /*option P*/replace(/([^\\])P|^P/g, '$1' + GMTDiffFormatted.substr(0, 3) + ":" + GMTDiffFormatted.substr(3,2)).//replace all P's with Difference to Greenwich time (GMT) with colon between hours and minutes
-            /*option T*/replace(/([^\\])T|^T/g, '$1' + timezones[currentTimezone]).//replace all T's with Timezone abbreviation
-            /*option Z*/replace(/([^\\])Z|^Z/g, '$1' + (-1 * GMTDiff * 60)).//replace all Z's with Timezone offset in seconds. The offset for timezones west of UTC is always negative, and for those east of UTC is always positive
+                dateWithZero = (date < 10 ? "0" + date : date),
+                threeLetterDay = ['\\S\\u\\n','\\M\\o\\n','\\T\\u\\e\\s','\\W\\e\\d','\\T\\h\\u','\\F\\r\\i', '\\S\\a\\t'][day],
+                threeLetterMonth = ['\\J\\a\\n','\\F\\e\\b','\\M\\a\\r','\\A\\p\\r','\\M\\a\\y','\\J\\u\\n','\\J\\u\\l','\\A\\u\\g','\\S\\e\\p','\\O\\c\\t','\\N\\o\\v','\\D\\e\\c'][month - 1],
+                hour24 = (hour < 10 ? "0" + hour : hour),
+                GMTDiffFormatted = (GMTDiff > 0 ? "+" : "-") + (Math.abs(GMTDiff) < 10 ? "0" : "") + Math.abs(GMTDiff) + "00";
 
 
-            /*option c*/replace(/([^\\])c|^c/g, '$1' + (datetime.toISOString ? datetime.toISOString() : "")).//replace all c's with ISO 8601 date
-            /*option r*/replace(/([^\\])r|^r/g, '$1' + threeLetterDay + ', ' + dateWithZero + ' ' + threeLetterMonth + ' ' + year  + ' ' + hour24 + ':' + minuteWithZero + ':' + secondsWithZero + ' ' + GMTDiffFormatted).//replace all r's with RFC 2822 formatted date
-            /*option U*/replace(/([^\\])U|^U/g, '$1' + epoch / 1000).//replace all U's with Seconds since the Unix Epoch (January 1 1970 00:00:00 GMT)
-            replace(/\\/gi, "");
+
+            return /*option d or %d*/format.replace(/%d|([^\\])d|^d/g, '$1' + dateWithZero).// replace all d's with the 2 digit day leading 0
+                /*option D*/replace(/([^\\])D|^D/g, '$1' + threeLetterDay).// replace all D's with A textual representation of a day, three letters
+                /*option j*/replace(/([^\\])j|^j/g, '$1' + date).// replace all j's with the day without leading 0
+                /*option l*/replace(/([^\\])l|^l/g, '$1' + ['\\S\\u\\n\\d\\a\\y','\\M\\o\\n\\d\\a\\y','\\T\\u\\e\\s\\d\\a\\y','\\W\\e\\d\\n\\e\\s\\d\\a\\y','\\T\\h\\u\\r\\s\\d\\a\\y','\\F\\r\\i\\d\\a\\y', '\\S\\a\\t\\u\\r\\d\\a\\y'][day]).// replace all l's (lower case L) with A full textual representation of the day of the week
+                /*option N*/replace(/([^\\])N|^N/g, '$1' + (day == 0 ? 7 : day)).// replace all N's with ISO-8601 numeric representation of the day of the week
+                /*option S*/replace(/([^\\%]S)|^S/g, '$1' + (date > 3 ? '\\t\\h' : (date == 1 ? '\\s\\t' : (date == 2 ? '\\n\\d' : '\\r\\d')))).// replace all S's with English ordinal suffix for the day of the month, 2 characters
+                /*option w*/replace(/([^\\])w|^w/g, '$1' + day).// replace all w's with Numeric representation of the day of the week (starting from 1)
+                /*option w*/replace(/%w/g, day + 1).// replace all %w's with Numeric representation of the day of the week (starting from 0)
+                /*option z*/replace(/([^\\])z|^z/g, '$1' + dayOfYear).// replace all z's with The day of the year (starting from 0)
+                /*option %j*/replace(/%j/g, dayOfYearWithZero).// replace all %j's with The day of the year (starting from 1)
+
+                /*option W*/replace(/([^\\])W|^W/g, '$1' + (week > 0 ? week : 52)).// replace all W's with ISO-8601 week number of the year, weeks staring on Monday
+                /*option W*/replace(/%U/g, week < 10 ? "0" + week : week).// replace all %U's with ISO-8601 week number of the year, weeks staring on Monday
+
+                /*option F*/replace(/([^\\])F|^F/g, '$1' + ['\\J\\a\\n\\u\\a\\r\\y','\\F\\e\\b\\r\\u\\a\\r\\y','\\M\\a\\r\\c\\h','\\A\\p\\r\\i\\l','\\M\\a\\y','\\J\\u\\n\\e','\\J\\u\\l\\y','\\A\\u\\g\\u\\s\\t','\\S\\e\\p\\t\\e\\m\\b\\e\\r','\\O\\c\\t\\o\\b\\e\\r','\\N\\o\\v\\e\\m\\b\\e\\r','\\D\\e\\c\\e\\m\\b\\e\\r'][month - 1]).// replace all F's with A full textual representation of a month, such as January or March
+                /*option m* or %m*/replace(/%m|([^\\])m|^m/g, '$1' + (month < 10 ? "0" + month : month)).// replace all m's with Numeric representation of a month, with leading zeros
+                /*option M or %M*/replace(/%M|([^\\])M|^M/g, '$1' + threeLetterMonth).// replace all M's with A short textual representation of a month, three letters
+                /*option n*/replace(/([^\\])n|^n/g, '$1' + month).// replace all n's with Numeric representation of a month, without leading zeros
+                /*option t*/replace(/([^\\])t|^t/g, '$1' + (month == 2 && $c.isInt(year/4) ? 29 :[31,28,31,30,31,30,31,31,30,31,30,31][month - 1])).// replace all t's with Number of days in the given month
+
+                /*option L*/replace(/([^\\])L|^L/g, '$1' + $c.isInt(year/4) ? 0 : 1).//replace all t's with Whether it's a leap year
+                /*option o*/replace(/([^\\])o|^o/g, '$1' + (week > 0 ? year : year - 1)).//replace all o's with A full numeric representation of a year, 4 digits.  If 'W' belongs to the previous or next year, that year is used instead.
+                /*option Y or %Y*/replace(/%Y|([^\\])Y|^Y/g, '$1' + year).//replace all t's with A full numeric representation of a year, 4 digits
+                /*option y*/replace(/([^\\])y|^y/g, '$1' + year.toString().substring(year.toString().length - 2)).//replace all t's with A two digit representation of a year
+
+                /*option a*/replace(/([^\\])a|^a/g, '$1' + (hour > 11 ? "\\p\\m" : "\\a\\m")).//replace all a's with Lowercase Ante Meridiem and Post Meridiem
+                /*option A*/replace(/([^\\])A|^A/g, '$1' + (hour > 11 ? "\\P\\M" : "\\A\\M")).//replace all A's with Uppercase Ante Meridiem and Post Meridiem
+                /*option B*/replace(/([^\\])B|^B/g, '$1' + Math.floor((((datetime.getUTCHours() + 1)%24) + datetime.getUTCMinutes()/60 + datetime.getUTCSeconds()/3600)*1000/24)).//replace all B's with Swatch Internet time
+                /*option g*/replace(/([^\\])g|^g/g, '$1' + (hour == 0 ? 12 : hour > 12 ? hour - 12 : hour)).//replace all g's with 12-hour format of an hour without leading zeros
+                /*option G*/replace(/([^\\])G|^G/g, '$1' + hour).//replace all G's with 24-hour format of an hour without leading zeros
+                /*option h*/replace(/([^\\])h|^h/g, '$1' + (hour < 10 ? "0" + hour : (hour > 12 && hour - 12 < 10) ? "0" + (hour - 12) : hour)).//replace all h's with 12-hour format of an hour with leading zeros
+                /*option H or %H*/replace(/%H|([^\\])H|^H/g, '$1' + hour24).//replace all H's with 24-hour format of an hour with leading zeros
+                /*option i*/replace(/([^\\])i|^i/g, '$1' + minuteWithZero).//replace all i's with Minutes with leading zeros
+                /*option s or %S*/replace(/%S|([^\\])s|^s/g, '$1' + secondsWithZero).//replace all s's with Seconds, with leading zeros
+                /*option u*/replace(/([^\\])u|^u/g, '$1' + epoch*1000).//replace all u's with Microseconds
+                /*option %L*/replace(/%L/g, epoch).//replace all u's with Milliseconds
+
+                /*option e*/replace(/([^\\])e|^e/g, '$1' + currentTimezone).//replace all e's with Timezone identifier
+                /*option I*/replace(/([^\\])I|^I/g, '$1' + Math.max((new Date(datetime.getFullYear(), 0, 1)).getTimezoneOffset(), (new Date(datetime.getFullYear(), 6, 1)).getTimezoneOffset()) > datetime.getTimezoneOffset() ? 1 : 0).//replace all I's with Whether or not the date is in daylight saving time
+
+                /*option O*/replace(/([^\\])O|^O/g, '$1' + GMTDiffFormatted).//replace all O's with Difference to Greenwich time (GMT) in hours
+                /*option P*/replace(/([^\\])P|^P/g, '$1' + GMTDiffFormatted.substr(0, 3) + ":" + GMTDiffFormatted.substr(3,2)).//replace all P's with Difference to Greenwich time (GMT) with colon between hours and minutes
+                /*option T*/replace(/([^\\])T|^T/g, '$1' + timezones[currentTimezone]).//replace all T's with Timezone abbreviation
+                /*option Z*/replace(/([^\\])Z|^Z/g, '$1' + (-1 * GMTDiff * 60)).//replace all Z's with Timezone offset in seconds. The offset for timezones west of UTC is always negative, and for those east of UTC is always positive
+
+
+                /*option c*/replace(/([^\\])c|^c/g, '$1' + (datetime.toISOString ? datetime.toISOString() : "")).//replace all c's with ISO 8601 date
+                /*option r*/replace(/([^\\])r|^r/g, '$1' + threeLetterDay + ', ' + dateWithZero + ' ' + threeLetterMonth + ' ' + year  + ' ' + hour24 + ':' + minuteWithZero + ':' + secondsWithZero + ' ' + GMTDiffFormatted).//replace all r's with RFC 2822 formatted date
+                /*option U*/replace(/([^\\])U|^U/g, '$1' + epoch / 1000).//replace all U's with Seconds since the Unix Epoch (January 1 1970 00:00:00 GMT)
+                replace(/\\/gi, "");
         } catch (e) {
             error("Date.format", e);
         }
     }, true);
+    _ext(Date, 'getDayOfYear', function () {
+        /*|{
+         "info": "Date class extension to retrieve the day of the year",
+         "category": "Date",
+         "parameters":[],
+
+         "overloads":[],
+
+         "description": "http://www.craydent.com/library/1.8.0/docs#array.getDayOfYear",
+         "returnType": "(Int)"
+         }|*/
+        try {
+            return Math.floor((this - new Date(this.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+        } catch (e) {
+            error("Date.getDayOfYear", e);
+        }
+    });
+    _ext(Date, 'getWeek', function () {
+        /*|{
+            "info": "Date class extension to retrieve the week number in the year",
+            "category": "Date",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.getWeek",
+            "returnType": "(Int)"
+        }|*/
+        try {
+            var d = new Date(+this);
+            d.setHours(0, 0, 0);
+            d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+            return Math.ceil((((d - new Date(d.getFullYear(), 0, 1)) / 8.64e7) + 1) / 7);
+        } catch (e) {
+            error("Date.getWeek", e);
+        }
+    });
     _ext(Date, 'isValidDate', function () {
-        /*|  {info: "Date class extension to check if the date is valid",
-         *    category: "Date",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#array.isValidDate"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Date class extension to check if the date is valid",
+            "category": "Date",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#array.isValidDate",
+            "returnType": "(Bool)"
+        }|*/
         try {
             return !isNaN(this.getTime());
         } catch (e) {
@@ -5333,18 +7657,21 @@ if (__thisIsNewer) {
     });
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Number class Extensions
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	Number class Extensions
+     /---------------------------------------------------------------------------------------------------------------*/
     _ext(Number, 'aboutEqualTo', function (compare, giveOrTake) {
-        /*|  {info: "Number class extension to check if values are approximately equal",
-         *    category: "Number",
-         *    parameters:[
-         *        {compare: "(Number) Number to compare"},
-         *        {giveOrTake: "(Number) Plus/minus value"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#number.aboutEqualTo"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Number class extension to check if values are approximately equal",
+            "category": "Number",
+            "parameters":[
+                {"compare": "(Number) Number to compare"},
+                {"giveOrTake": "(Number) Plus/minus value"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#number.aboutEqualTo",
+            "returnType": "(Bool)"
+        }|*/
         try {
             return $c.isBetween(this, compare - giveOrTake, compare + giveOrTake, true);
         } catch (e) {
@@ -5352,13 +7679,16 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Number, 'isEven', function () {
-        /*|  {info: "Number class extension to check if number is even",
-         *    category: "Number",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#number."},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Number class extension to check if number is even",
+            "category": "Number",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#number.",
+            "returnType": "(Bool)"
+        }|*/
         try {
             return _even(this);
         } catch (e) {
@@ -5366,13 +7696,16 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Number, 'isOdd', function () {
-        /*|  {info: "Number class extension to check if number is odd",
-         *    category: "Number",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#number."},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Number class extension to check if number is odd",
+            "category": "Number",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#number.",
+            "returnType": "(Bool)"
+        }|*/
         try {
             return !_even(this);
         } catch (e) {
@@ -5380,17 +7713,18 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Number, 'toCurrencyNotation', function (separator) {
-        /*|  {info: "Number class extension to change number to currency",
-         *    category: "Number",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {separator: "(Char) Character to use as delimitor"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#number.toCurrencyNotation"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "Number class extension to change number to currency",
+            "category": "Number",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"separator": "(Char) Character to use as delimiter"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#number.toCurrencyNotation",
+            "returnType": "(String)"
+        }|*/
         try {
             separator = separator || ",";
             return this.toString().replace(/\B(?=(\d{3})+(?!\d))/g, separator);
@@ -5400,16 +7734,19 @@ if (__thisIsNewer) {
     }, true);
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Function class Extensions
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	Function class Extensions
+     /---------------------------------------------------------------------------------------------------------------*/
     _ext(Function, 'getParameters', function () {
-        /*|  {info: "Function class extension to get parameters in definition",
-         *    category: "Function",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#function.getParameters"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Function class extension to get parameters in definition",
+            "category": "Function",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#function.getParameters",
+            "returnType": "(Array)"
+        }|*/
         try {
             return _getFuncArgs(this);
         } catch (e) {
@@ -5417,46 +7754,118 @@ if (__thisIsNewer) {
         }
     }, true);
     _ext(Function, 'getName', function () {
-        /*|  {info: "Function class extension to get the name of the function",
-         *    category: "Function",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#function.getName"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "Function class extension to get the name of the function",
+            "category": "Function",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#function.getName",
+            "returnType": "(String)"
+        }|*/
         try {
             return _getFuncName(this);
         } catch (e) {
             error("Function.getName", e);
         }
     }, true);
+    _ext(Function, 'extends',function(extendee, inheritAsOwn){
+        /*|{
+            "info": "Function class extension to extend another class",
+            "category": "Function",
+            "parameters":[
+                {"extendee":"(Object) Class to extend"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"extendee":"(Object) Class to extend"},
+                    {"inheritAsOwn":"(Boolean) Flag to inherit and for values hasOwnProperty to be true."}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#function.getName",
+            "returnType": "(String)"
+        }|*/
+        try {
+            var className = this.getName(),
+                cls = new extendee();
+            namespace[className] = $w[className];
+            if (inheritAsOwn) {
+                for (var prop in cls) {
+                    if (!cls.hasOwnProperty(prop)) { continue; }
+                    this.prototype[prop] = /*this[prop] ||*/ this.prototype[prop] || cls[prop];//function(){return $c.getValue(cls[prop],arguments);};
+                }
+                for (var prop in extendee) {
+                    if (!extendee.hasOwnProperty(prop)) { continue; }
+                    this[prop] = this[prop] || extendee[prop];
+                }
+            }
+
+            this.prototype.construct = this.prototype.construct || cls.construct || foo;
+
+            return this;
+        } catch (e) {
+            error("Function.extends", e);
+        }
+    }, true);
+
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Object class Extensions
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	RegExp class Extensions
+     /---------------------------------------------------------------------------------------------------------------*/
+    _ext(RegExp, 'addFlags',function(flags){
+        /*|{
+            "info": "RegExp class extension to add flags to regex",
+            "category": "RegExp",
+            "parameters":[
+                {"flags": "(String) Flags to add"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#regexp.addFlag",
+            "returnType": "(RegExp)"
+        }|*/
+        try {
+            if (this.global && !flags.contains('g')) { flags += "g"; }
+            if (this.ignoreCase && !flags.contains('i')) { flags += "i"; }
+            if (this.multiline && !flags.contains('m')) { flags += "m"; }
+
+            return new RegExp(this.source, flags);
+        } catch (e) {
+            error("RegExp.addFlags", e);
+        }
+    }, true);
+
+    /*----------------------------------------------------------------------------------------------------------------
+     /-	Object class Extensions
+     /---------------------------------------------------------------------------------------------------------------*/
     _ao("changes", function(compare){
-        /*|  {info: "Object class extension to compare properties that have changed",
-         *    category: "Object",
-         *    parameters:[
-         *        {compare: "(Object) Object to compare against"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object."},
-         *    returnType: “(Object)”
-         * |*/
+        /*|{
+            "info": "Object class extension to compare properties that have changed",
+            "category": "Object",
+            "parameters":[
+                {"compare": "(Object) Object to compare against"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.",
+            "returnType": "(Object)"
+        }|*/
         try {
             if (this.constructor != Object || compare.constructor != Object) {
+                //noinspection ExceptionCaughtLocallyJS
                 throw new TypeError();
-                return;
             }
-            var rtn = {$length:0};
+            var rtn = {$length:0,$add:[],$update:[],$delete:[]};
             // loop through each property of the original
             for (var prop in this) {
                 if (this.hasOwnProperty(prop)) {
                     if (!compare.hasOwnProperty(prop)) {
                         rtn[prop] = null;
+                        rtn.$delete.push(prop);
                         rtn.$length++;
                     } else if (!$c.equals(compare[prop], this[prop])) {
                         rtn[prop] = compare[prop];
+                        rtn.$update.push(prop);
                         rtn.$length++;
                     }
                 }
@@ -5466,6 +7875,7 @@ if (__thisIsNewer) {
             for (var prop in compare) {
                 if (compare.hasOwnProperty(prop) && !this.hasOwnProperty(prop)) {
                     rtn[prop] = compare[prop];
+                    rtn.$add.push(prop);
                     rtn.$length++;
                 }
             }
@@ -5476,30 +7886,41 @@ if (__thisIsNewer) {
         }
     });
     _ao("contains", function(val, func){
-        /*|  {info: "Object class extension to check if value exists",
-         *    category: "Object",
-         *    parameters:[
-         *        {val: "(Mixed) Value to check"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {val "(Mixed) Value to check"},
-         *            {func: "(Function) Callback function used to do the comparison"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.contains"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if value exists",
+            "category": "Object",
+            "parameters":[
+                {"val": "(Mixed) Value to check"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"val" "(Mixed) Value to check"},
+                    {"func": "(Function) Callback function used to do the comparison"}]},
+                {"parameters":[
+                    {"val" "(Mixed) Value to check"},
+                    {"arr": "(Array) Array of values to return first matching value"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.contains",
+            "returnType": "(Bool)"
+        }|*/
         try {
             switch(true) {
                 case $c.isArray(this):
-                    if (func) {
-                        return this.indexOfAlt(val, func) != -1;
+                    if ($c.isFunction(func)) {
+                        return $c.indexOfAlt(this, func) != -1;
+                    } else if ($c.isArray(func)) {
+                        for (var i = 0,len = func.length;i < len; i++) {
+                            if (this.contains(func[i])) {
+                                return func[i];
+                            }
+                        }
                     }
                     return this.indexOf(val) != -1;
                 case $c.isString(this):
-                    return this.indexOf(val) != -1;
+                    return ($c.isRegExp(val) ? this.search(val) : this.indexOf(val)) != -1;
                 case $c.isObject(this):
                     for (var prop in this) {
+                        if (!this.hasOwnProperty(prop)) { continue; }
                         if ((func && func(this[prop])) || this[prop] == val) {
                             return true;
                         }
@@ -5514,13 +7935,16 @@ if (__thisIsNewer) {
         }
     });
     _ao("copyObject", function () {
-        /*|  {info: "Object class extension to copy an object including constructor",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.copyObject"},
-         *    returnType: “(Object)”
-         * |*/
+        /*|{
+            "info": "Object class extension to copy an object including constructor",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.copyObject",
+            "returnType": "(Object)"
+        }|*/
         try {
             if (!this) {
                 return undefined;
@@ -5531,37 +7955,63 @@ if (__thisIsNewer) {
         }
     });
     _ao("duplicate", function (recursive) {
-        /*|  {info: "Object class extension to copy an object excluding constructor",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {recursive: "(Boolean) Flag to copy all child objects recursively"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.duplicate"},
-         *    returnType: “(Object)”
-         * |*/
+        /*|{
+            "info": "Object class extension to copy an object excluding constructor",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"recursive": "(Boolean) Flag to copy all child objects recursively"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.duplicate",
+            "returnType": "(Object)"
+        }|*/
         try {
             return _duplicate({}, this, recursive);
         } catch (e) {
             error('Object.duplicate', e);
         }
     });
+    _ao("eachProperty", function (callback) {
+        /*|{
+            "info": "Object class extension to loop through all properties where hasOwnValue is true.",
+            "category": "Object",
+            "parameters":[
+                {"callback": "(Function) Function to call for each property.  Callback will have two arguments (the value of the object and the property name) passed"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.eachProperty",
+            "returnType": "(Object)"
+        }|*/
+        try {
+            for (var prop in this) {
+                if (!this.has(prop)) { continue; }
+                if (callback.call(this, this[prop], prop)) { break; }
+            }
+        } catch (e) {
+            error('Object.eachProperty', e);
+        }
+    });
     _ao("equals", function (compare, props){
-        /*|  {info: "Object class extension to check if object values are equal",
-         *    category: "Object",
-         *    parameters:[
-         *        {compare: "(Object) Object to compare against"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.equals"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object values are equal",
+            "category": "Object",
+            "parameters":[
+                {"compare": "(Object) Object to compare against"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.equals",
+            "returnType": "(Bool)"
+        }|*/
         try {
             if ($c.isArray(props)) {
+                var j = 0;
                 while (prop = props[j++]) {
                     if (this.hasOwnProperty(prop) && compare.hasOwnProperty(prop) && this[prop] != compare[prop]
-                    || (!this.hasOwnProperty(prop) && compare.hasOwnProperty(prop)) || (this.hasOwnProperty(prop) && !compare.hasOwnProperty(prop))) {
+                        || (!this.hasOwnProperty(prop) && compare.hasOwnProperty(prop)) || (this.hasOwnProperty(prop) && !compare.hasOwnProperty(prop))) {
                         return false;
                     }
                 }
@@ -5592,19 +8042,20 @@ if (__thisIsNewer) {
         }
     });
     _ao("every", function(callback, thisObject) {
-        /*|  {info: "Object class extension to check property values against a function",
-         *    category: "Object",
-         *    parameters:[
-         *        {callback: "(Function) Callback to apply to each value"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback to apply to each value"},
-         *            {thisObject: "(Mixed) Context for the callback function"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.every"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check property values against a function",
+            "category": "Object",
+            "parameters":[
+                {"callback": "(Function) Callback to apply to each value"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback to apply to each value"},
+                    {"thisObject": "(Mixed) Context for the callback function"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.every",
+            "returnType": "(Bool)"
+        }|*/
         try {
             thisObject = thisObject || this;
             for (var prop in this)
@@ -5616,48 +8067,143 @@ if (__thisIsNewer) {
         }
     });
     _ao("getClass", function() {
-        /*|  {info: "Object class extension to get the constructor name",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.getClass"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "Object class extension to get the constructor name",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.getClass",
+            "returnType": "(String)"
+        }|*/
         try {
-            return _getFuncName(this);
+            return _getFuncName(this.constructor);
         } catch (e) {
             error('Object.getClass', e)
         }
     });
-    _ao("hop", Object.prototype.hasOwnProperty);
+    _ao("getProperty", function (path, delimiter, options) {
+        /*|{
+            "info": "Object class extension to retrieve nested properties without error when property path does not exist",
+            "category": "Object",
+            "featured": true,
+            "parameters":[
+                {"path": "(String) Path to nested property"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"path": "(String) Path to nested property"},
+                    {"delimiter": "(Char) Separator used to parse path"}]},
+                {"parameters":[
+                    {"path": "(String) Path to nested property"},
+                    {"delimiter": "(Char) Separator used to parse path"},
+                    {"options": "(Object) Options for ignoring inheritance, validPath, etc"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.getProperty",
+            "returnType": "(Mixed)"
+        }|*/
+        try {
+            options = options || {};
+            delimiter = delimiter || ".";
+            var props = path.split(delimiter);
+            var value = this;
+            for (var i = 0, len = props.length; i < len; i++) {
+                if (isNull(value[props[i]])
+                    || (options.noInheritance && !value.hasOwnProperty(props[i]))) {
+                    return undefined;
+                }
+                value = value[props[i]];
+            }
+            options.validPath = 1;
+            return value;
+        } catch (e) {
+            error('Object.getProperty', e);
+        }
+    });
+    _ao("getValue" ,function (args, dflt) {
+        /*|{
+         "info": "Object class extension to retrieve value of an object property",
+         "category": "Object",
+         "parameters":[],
+
+         "overloads":[
+         {"parameters":[
+         {"dflt": "(Mixed) Default value to return if context is not a function"}]},
+         {"parameters":[
+         {"args": "(Mixed[]) An array of arguments to pass to context when it is a function"},
+         {"delimiter": "(Char) Separator used to parse path"},
+         {"options": "(Object) Options for ignoring inheritance, validPath, etc"}]}],
+
+         "description": "http://www.craydent.com/library/1.8.0/docs#object.getProperty",
+         "returnType": "(Mixed)"
+         }|*/
+        try {
+            if (!$c.isFunction(this)) {
+                if (args && !dflt) {
+                    dflt = args;
+                }
+                return isNull(this, dflt) || this;
+            }
+            var args = arguments;
+            if (typeof obj != 'undefined') { // this is needed to check if this function was called using $c.getValue
+                args = [];
+                for (var i = 1, len = arguments.length; i < len; i++) {
+                    args[i] = arguments[i];
+                }
+            }
+            var rtn = this.apply(this, args);
+            return rtn === undefined ? dflt : rtn;
+        } catch (e) {
+            error('Object.getValue', e);
+        }
+    });
+    _ao("has", function(){
+        /*|{
+            "info": "Alias to Object.prototype.hasOwnProperty",
+            "category": "Object",
+            "parameters":[
+                {"callback": "(String) Property name to check"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.has",
+            "returnType": "(Boolean)"
+        }|*/
+        return Object.prototype.hasOwnProperty.apply(this,arguments);
+    });
     _ao("isArray", function () {
-        /*|  {info: "Object class extension to check if object is an array",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isArray"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is an array",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isArray",
+            "returnType": "(Bool)"
+        }|*/
         return _isArray(this);
     });
     _ao("isBetween", function(lowerBound, upperBound, inclusive) {
-        /*|  {info: "Object class extension to check if object is between lower and upper bounds",
-         *    category: "Object",
-         *    parameters:[
-         *        {lowerBound: ""},
-         *        {upperBound: ""}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {lowerBound: "(Mixed) Lower bound comparison"},
-         *            {upperBound: "(Mixed) Upper bound comparison"},
-         *            {inclusive: "(Bool) Flag to include give bounds"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isBetween"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is between lower and upper bounds",
+            "category": "Object",
+            "parameters":[
+                {"lowerBound": "(Mixed) Lower bound comparison"},
+                {"upperBound": "(Mixed) Upper bound comparison"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"lowerBound": "(Mixed) Lower bound comparison"},
+                    {"upperBound": "(Mixed) Upper bound comparison"},
+                    {"inclusive": "(Bool) Flag to include give bounds"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isBetween",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             if (inclusive) {
                 return (this >= lowerBound && this <= upperBound);
             } else {
@@ -5668,168 +8214,221 @@ if (__thisIsNewer) {
         }
     });
     _ao("isBoolean", function() {
-        /*|  {info: "Object class extension to check if object is a boolean",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isBoolean"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is a boolean",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isBoolean",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             return (this.constructor == Boolean);
         } catch (e) {
             error('Object.isBoolean', e);
         }
     });
     _ao("isDate", function() {
-        /*|  {info: "Object class extension to check if object is a date",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isDate"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is a date",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isDate",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             return (this.constructor == Date);
         } catch (e) {
             error('Object.isDate', e);
         }
     });
     _ao("isDomElement", function() {
-        /*|  {info: "Object class extension to check if object is a DOM element",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isDomElement"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is a DOM element",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isDomElement",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             return (this.nodeType == 1);
         } catch (e) {
             error('Object.isDomElement', e);
         }
     });
     _ao("isFloat", function() {
-        /*|  {info: "Object class extension to check if object is a float",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isFloat"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is a float",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isFloat",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             return ($c.isNumber(this) && (parseFloat(this) == this || parseFloat(this) === 0));
         } catch (e) {
             error('Object.isFloat', e);
         }
     });
     _ao("isFunction", function() {
-        /*|  {info: "Object class extension to check if object is a function",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isFunction"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is a function",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isFunction",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             return (this.constructor == Function);
         } catch (e) {
             error('Object.isFunction', e);
         }
     });
     _ao("isGeolocation", function () {
-        /*|  {info: "Object class extension to check if object is a geolocation",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isGeoLocation"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is a geolocation",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isGeoLocation",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             return (this.constructor.toString().indexOf('function Geolocation()') == 0);
         } catch (e) {
             error('Object.isGeolocation', e);
         }
     });
     _ao("isInt", function () {
-        /*|  {info: "Object class extension to check if object is an integer",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isInt"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is an integer",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isInt",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined || $c.isArray(this)) {return false;}
+            if (isNull(this) || $c.isArray(this)) {return false;}
             return (parseInt(this) == this || parseInt(this) === 0);
         } catch (e) {
             error('Object.isInt', e);
         }
     });
     _ao("isNumber", function() {
-        /*|  {info: "Object class extension to check if object is a number",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isNumber"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is a number",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isNumber",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             return (this.constructor == Number);
         } catch (e) {
             error('Object.isNumber', e);
         }
     });
     _ao("isObject", function (check_instance) {
-        /*|  {info: "Object class extension to check if object is an object",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isObject"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is an object",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isObject",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            if (this === undefined) {return false;}
+            if (isNull(this)) {return false;}
             return (this.constructor == Object || (!!check_instance && this instanceof Object));
         } catch (e) {
             error('Object.isObject', e);
         }
     });
+    _ao("isRegExp", function() {
+        /*|{
+            "info": "Object class extension to check if object is a RegExp",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isRegExp",
+            "returnType": "(Bool)"
+        }|*/
+        try {
+            if (isNull(this)) {return false;}
+            return (this.constructor == RegExp);
+        } catch (e) {
+            error('Object.isRegExp', e);
+        }
+    });
     _ao("isString", function () {
-        /*|  {info: "Object class extension to check if object is a string",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isString"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to check if object is a string",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isString",
+            "returnType": "(Bool)"
+        }|*/
         return _isString(this);
     });
-    _ao("isSubset", function (compare){
-        /*|  {info: "Object class extension to check if item is a subset",
-         *    category: "Object",
-         *    parameters:[
-         *        {compare: "(Mixed) Superset to compare against"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.isSubset"},
-         *    returnType: “(Bool)”
-         * |*/
-        try {
-            if (($c.isObject(this) && $c.isObject(compare)) || ($c.isArray(this) && $c.isArray(compare))) {
+    _ao("isSubset", function (compare, sharesAny){
+        /*|{
+            "info": "Object class extension to check if item is a subset",
+            "category": "Object",
+            "parameters":[
+                {"compare": "(Mixed) Superset to compare against"}],
 
-                for (prop in this){
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.isSubset",
+            "returnType": "(Bool)"
+        }|*/
+        try {
+            var isArray = $c.isArray(this) && $c.isArray(compare);
+            if (($c.isObject(this) && $c.isObject(compare)) || isArray) {
+
+                for (var prop in this){
                     if (!this.hasOwnProperty(prop)) {
                         continue;
                     }
-                    if (!compare.hasOwnProperty(prop)) {
+                    if (!isArray && !compare.hasOwnProperty(prop) || isArray && !compare.contains(this[prop])) {
                         return false;
+                    }
+                    if (sharesAny) {
+                        return true;
                     }
                 }
 
@@ -5842,17 +8441,20 @@ if (__thisIsNewer) {
         }
     });
     _ao("itemCount", function () {
-        /*|  {info: "Object class extension to count the properties in item",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.itemCount"},
-         *    returnType: “(Int)”
-         * |*/
+        /*|{
+            "info": "Object class extension to count the properties in item",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.itemCount",
+            "returnType": "(Int)"
+        }|*/
         try {
             if ($c.isObject(this)) {
                 var count = 0;
-                for (prop in this){
+                for (var prop in this){
                     if (this.hasOwnProperty(prop)) {
                         count++;
                     }
@@ -5865,19 +8467,22 @@ if (__thisIsNewer) {
         }
     });
     _ao("keyOf", function (value) {
-        /*|  {info: "Object class extension to get the key of the give value",
-         *    category: "Object",
-         *    parameters:[
-         *        {value: "(Mixed) Value to compare against"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.keyOf"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "Object class extension to get the key of the give value",
+            "category": "Object",
+            "parameters":[
+                {"value": "(Mixed) Value to compare against"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.keyOf",
+            "returnType": "(String)"
+        }|*/
         try {
             for(var prop in this) {
                 if(this.hasOwnProperty(prop)) {
-                     if(this[prop] === value)
-                         return prop;
+                    if(this[prop] === value)
+                        return prop;
                 }
             }
             return null;
@@ -5886,18 +8491,21 @@ if (__thisIsNewer) {
         }
     });
     _ao("keys", function () {
-        /*|  {info: "Object class extension to get the keys of the object",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.keys"},
-         *    returnType: “(Array)”
-         * |*/
+        /*|{
+            "info": "Object class extension to get the keys of the object",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.keys",
+            "returnType": "(Array)"
+        }|*/
         try {
             if(Object.keys(foo)) {
-               return  Object.keys(this);
+                return  Object.keys(this);
             }
-            arr = [];
+            var arr = [];
             for(var prop in this) {
                 if(this.hasOwnProperty(prop)) {
                     arr.push(prop);
@@ -5909,19 +8517,20 @@ if (__thisIsNewer) {
         }
     });
     _ao("map", function(callback, thisObject) {
-        /*|  {info: "Object class extension to apply method to every value",
-         *    category: "Object",
-         *    parameters:[
-         *        {callback: "(Function) Callback to apply to each value"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback to apply to each value"},
-         *            {thisObject: "(Mixed) Context for the callback function"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.map"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "Object class extension to apply method to every value",
+            "category": "Object",
+            "parameters":[
+                {"callback": "(Function) Callback to apply to each value"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback to apply to each value"},
+                    {"thisObject": "(Mixed) Context for the callback function"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.map",
+            "returnType": "(void)"
+        }|*/
         try {
             thisObject = thisObject || this;
             for (var prop in this) {
@@ -5934,19 +8543,20 @@ if (__thisIsNewer) {
         }
     });
     _ao("merge", function (secondary, condition) {//shareOnly) {
-        /*|  {info: "Object class extension to merge objects",
-         *    category: "Object",
-         *    parameters:[
-         *        {secondary: "(Object) Object to merge with"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {secondary: "(Object) Object to merge with"},
-         *            {condition: "(Mixed) Flags to recurse, merge only shared value, clone etc"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.merge"},
-         *    returnType: “(Object)”
-         * |*/
+        /*|
+            {"info": "Object class extension to merge objects",
+            "category": "Object",
+            "parameters":[
+                {"secondary": "(Object) Object to merge with"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"secondary": "(Object) Object to merge with"},
+                    {"condition": "(Mixed) Flags to recurse, merge only shared value, clone etc"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.merge",
+            "returnType": "(Object)"
+        }|*/
         try {
             condition = condition || {};
             var recurse = condition == "recurse" || condition.recurse,
@@ -5968,7 +8578,7 @@ if (__thisIsNewer) {
                         }
                         objtmp.push($c.duplicate(secondary[prop]));
                     } else {
-                        if ($c.isArray(objtmp) && (condition === undefined || recurse)) {
+                        if ($c.isArray(objtmp) && (isNull(condition) || recurse)) {
                             if (objtmp.indexOf(secondary[prop]) == -1) {
                                 objtmp.push(secondary[prop]);
                             }
@@ -5980,8 +8590,9 @@ if (__thisIsNewer) {
             }
             if (recurse) {
                 var args = [],
-                removeCount = 1;
+                    removeCount = 1;
                 for (var aprop in arguments) {
+                    if (!arguments.hasOwnProperty(aprop)) { continue; }
                     if ($c.isInt(aprop)) {
                         args.push(arguments[aprop]);
                     }
@@ -5999,63 +8610,28 @@ if (__thisIsNewer) {
             error('Object.merge', e);
         }
     });
-    _ao("getProperty", function (path, delimiter, options) {
-        /*|  {info: "Object class extension to retrieve nested properties without erroring when property path does not exist",
-         *    category: "Object",
-         *    parameters:[
-         *        {path: "(String) Path to nested property"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {path: "(String) Path to nested property"},
-         *            {delimiter: "(Char) Separator used to parse path"}]},
-         *        {parameters:[
-         *            {path: "(String) Path to nested property"},
-         *            {delimiter: "(Char) Separator used to parse path"},
-         *            {options: "(Object) Options for ignoring inheritance, validPath, etc"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.getProperty"},
-         *    returnType: “(Mixed)”
-         * |*/
-        try {
-            options = options || {};
-            delimiter = delimiter || ".";
-            var props = path.split(delimiter);
-            var value = this;
-            for (var i = 0, len = props.length; i < len; i++) {
-                if (value[props[i]] === undefined || value[props[i]] === null
-                    || (options.noInheritance && !value.hasOwnProperty(props[i]))) {
-                    return undefined;
-                }
-                value = value[props[i]];
-            }
-            options.validPath = 1;
-            return value;
-        } catch (e) {
-            error('Object.getProperty', e)
-        }
-    });
     _ao("setProperty", function (path, value, delimiter, options) {
-        /*|  {info: "Object class extension to set nested properties creating necessary property paths",
-         *    category: "Object",
-         *    parameters:[
-         *        {path: "(String) Path to nested property"},
-         *        {value: "(Mixed) Value to set"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {path: "(String) Path to nested property"},
-         *            {value: "(Mixed) Value to set"},
-         *            {delimiter: "(Char) Separator used to parse path"}]},
-         *        {parameters:[
-         *            {path: "(String) Path to nested property"},
-         *            {delimiter: "(Char) Separator used to parse path"},
-         *            {value: "(Mixed) Value to set"},
-         *            {options: "(Object) Options for ignoring inheritance, validPath, etc"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#object.setProperty"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "Object class extension to set nested properties creating necessary property paths",
+            "category": "Object",
+            "parameters":[
+                {"path": "(String) Path to nested property"},
+                {"value": "(Mixed) Value to set"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"path": "(String) Path to nested property"},
+                    {"value": "(Mixed) Value to set"},
+                    {"delimiter": "(Char) Separator used to parse path"}]},
+                {"parameters":[
+                    {"path": "(String) Path to nested property"},
+                    {"delimiter": "(Char) Separator used to parse path"},
+                    {"value": "(Mixed) Value to set"},
+                    {"options": "(Object) Options for ignoring inheritance, validPath, etc"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#object.setProperty",
+            "returnType": "(Bool)"
+        }|*/
         try {
             options = options || {};
             delimiter = delimiter || ".";
@@ -6075,24 +8651,25 @@ if (__thisIsNewer) {
         }
     });
     _ao("toStringAlt", function (delimiter, prefix, urlEncode) {
-        /*|  {info: "Object class extension for an alternate way to stringify object to formatted string",
-         *    category: "Object",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {delimiter: "(Char) Character to separate the property from the value"}]}
-         *        {parameters:[
-         *            {delimiter: "(Char) Character to separate the property from the value"},
-         *            {prefix: ""(Char) Character to prefix the property name}]}
-         *        {parameters:[
-         *            {delimiter: "(Char) Character to separate the property from the value"},
-         *            {prefix: "(Char) Character to prefix the property name"},
-         *            {urlEncode: "(Bool) Flag to url encode the property and value"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "Object class extension for an alternate way to stringify object to formatted string",
+            "category": "Object",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"delimiter": "(Char) Character to separate the property from the value"}]}
+                {"parameters":[
+                    {"delimiter": "(Char) Character to separate the property from the value"},
+                    {"prefix": ""(Char) Character to prefix the property name}]}
+                {"parameters":[
+                    {"delimiter": "(Char) Character to separate the property from the value"},
+                    {"prefix": "(Char) Character to prefix the property name"},
+                    {"urlEncode": "(Bool) Flag to url encode the property and value"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#",
+            "returnType": "(String)"
+        }|*/
         try {
             delimiter = delimiter || '=';
             prefix = prefix || '&';
@@ -6100,7 +8677,7 @@ if (__thisIsNewer) {
             for (var prop in this) {
                 if (this.hasOwnProperty(prop)) {
                     urlEncode &&
-                        (str += prefix + encodeURIComponent(prop) + delimiter + encodeURIComponent(this[prop])) || (str += prefix + prop + delimiter + this[prop]);
+                    (str += prefix + encodeURIComponent(prop) + delimiter + encodeURIComponent(this[prop])) || (str += prefix + prop + delimiter + this[prop]);
                 }
             }
             return str;
@@ -6111,7 +8688,7 @@ if (__thisIsNewer) {
 
     /*IE prototype workaround*/
     if(!$w.HTMLElement) {
-        $w.HTMLElement = function(){};
+        $w.HTMLElement = foo;
         var _createElement = $d.createElement;
 
         $d.createElement = function(tag) {
@@ -6144,7 +8721,7 @@ if (__thisIsNewer) {
                 var _arr = _getElementsByTagName(tag);
                 for(var _elem=0;_elem<_arr.length;_elem++) {
                     try {
-                        if (isNull(_arr[_elem][name])) {
+                        if (isNull(_arr[_elem].name)) {
                             _setDOMElementProperties(_arr[_elem]);
                         }
                     } catch (e) {}
@@ -6155,30 +8732,30 @@ if (__thisIsNewer) {
             }
         };
         var _getElementsByClassName = $d.getElementsByClassName || function (className, tag, elm) {
-            try {
-                tag = tag || "*";
-                elm = elm || $d;
-                var classes = className.split(" "), xpath = "", xhtmlNamespace = "http://www.w3.org/1999/xhtml", namespaceResolver = $d.documentElement.namespaceURI === xhtmlNamespace ? xhtmlNamespace : null, elems = [], cursor, node;
-                xpath = ".//" + tag + fillTemplate("[contains(concat(' ', @class, ' '), ' ${this} ')]", classes);
                 try {
-                    cursor = $d.evaluate(query, elm, namespaceResolver, 0, null);
+                    tag = tag || "*";
+                    elm = elm || $d;
+                    var classes = className.split(" "), xpath = "", xhtmlNamespace = "http://www.w3.org/1999/xhtml", namespaceResolver = $d.documentElement.namespaceURI === xhtmlNamespace ? xhtmlNamespace : null, elems = [], cursor, node;
+                    xpath = ".//" + tag + fillTemplate("[contains(concat(' ', @class, ' '), ' ${this} ')]", classes);
+                    try {
+                        cursor = $d.evaluate(query, elm, namespaceResolver, 0, null);
+                    } catch (e) {
+                        cursor = $d.evaluate(query, elm, null, 0, null);
+                    }
+                    while (node = cursor.iterateNext()) {
+                        elems.push(node);
+                    }
+                    return elems;
                 } catch (e) {
-                    cursor = $d.evaluate(query, elm, null, 0, null);
+                    return [];
                 }
-                while (node = cursor.iterateNext()) {
-                    elems.push(node);
-                }
-                return elems;
-            } catch (e) {
-                return [];
-            }
-        };
+            };
         $d.getElementsByClassName = function(className, tag, elm) {
             try {
                 var _arr = _getElementsByClassName(className, tag, elm);
                 for(var _elem=0;_elem<_arr.length;_elem++) {
                     try {
-                        if (isNull(_arr[_elem][name])) {
+                        if (isNull(_arr[_elem].name)) {
                             _setDOMElementProperties(_arr[_elem]);
                         }
                     } catch (e) {}
@@ -6188,62 +8765,32 @@ if (__thisIsNewer) {
                 error("DOM.getElementsByClassName", e);
             }
         };
+
+        if (!$d.querySelectorAll && !$d.querySelector) {
+            $d.querySelectorAll = function (selector){
+                return _querySelectorAll(selector, Infinity);
+            };
+            $d.querySelector = function (selector){
+                return _querySelectorAll(selector, 1)[0] || null;
+            }
+        }
     }
 
     /*----------------------------------------------------------------------------------------------------------------
-    /-	Event class Extensions
-    /---------------------------------------------------------------------------------------------------------------*/
-//    (function(){
-//        if ($w.Event) {
-//            Event.prototype.pageX = Event.prototype.pageX || function(){
-//                try {
-//                    var scroll = $d.documentElement.scrollLeft ? $d.documentElement.scrollLeft : $d.body.scrollLeft;
-//                    return this.clientX + scroll;
-//                } catch (e) {
-//                    error("Event.pageX", e);
-//                }
-//            };
-//            Event.prototype._getCurrentTarget = Event.prototype._getCurrentTarget || function(func){
-//                try {
-//                    if(this.currentTarget){
-//                        return this.currentTarget;
-//                    } else {
-//                        var srcElement = this.srcElement,
-//                        sid = srcElement.id,
-//                        nextParentNode = srcElement.parentNode,
-//                        fnString = func ? func.toString() : arguments.callee.caller.toString(),
-//                        sIndex = fnString.indexOf("function", 0) + 8,
-//                        eIndex = fnString.indexOf("(", sIndex),
-//                        found = false,
-//                        fname = fnString.substring(sIndex, eIndex).trim();
-//                        while(sid){
-//                            if(EVENT_REGISTRY.Exists(sid, this.type, fname)){
-//                                return $(sid);
-//                            }
-//                            sid = nextParentNode.id;
-//                            nextParentNode = nextParentNode.parentNode;
-//                        }
-//                    }
-//                    return undefined;
-//                } catch (e) {
-//                    error("Event._getCurrentTarget", e);
-//                }
-//            };
-//        }
-//    })();
-
-    /*----------------------------------------------------------------------------------------------------------------
-    /-	DOM class Extensions
-    /---------------------------------------------------------------------------------------------------------------*/
+     /-	DOM class Extensions
+     /---------------------------------------------------------------------------------------------------------------*/
     _ah("addClass", function(names) {
-        /*|  {info: "HTMLElement class extension to add a class to the DOM object",
-         *    category: "HTMLElement",
-         *    parameters:[
-         *        {names: "(String[]) Name of the class to add"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.addClass"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to add a class to the DOM object",
+            "category": "HTMLElement",
+            "parameters":[
+                {"names": "(String[]) Name of the class to add"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.addClass",
+            "returnType": "(Bool)"
+        }|*/
         try {
             if ($c.isString(names)) {
                 names = [names];
@@ -6260,227 +8807,243 @@ if (__thisIsNewer) {
         }
     });
     _ah("blur", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger blur event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.blur"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger blur event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.blur",
+            "returnType": "(void)"
+        }|*/
         this.on("blur", callback);
     });
     _ah("change", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger change event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.change"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger change event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.change",
+            "returnType": "(void)"
+        }|*/
         this.on("change", callback);
     });
     _ah("click", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger click event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.click"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger click event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.click",
+            "returnType": "(void)"
+        }|*/
         this.on("click", callback);
     });
     _ah("contextmenu", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger contextmenu event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.contextmenu"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger contextmenu event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.contextmenu",
+            "returnType": "(void)"
+        }|*/
         this.on("contextmenu", callback);
     });
     _ah("dblclick", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger dblclick event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.dblclick"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger dblclick event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.dblclick",
+            "returnType": "(void)"
+        }|*/
         this.on("dblclick", callback);
     });
     _ah("drag", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger drag event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.drag"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger drag event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.drag",
+            "returnType": "(void)"
+        }|*/
         this.on("drag", callback);
     });
     _ah("dragend", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger dragend event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragend"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger dragend event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragend",
+            "returnType": "(void)"
+        }|*/
         this.on("dragend", callback);
     });
     _ah("dragenter", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger dragenter event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragenter"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger dragenter event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragenter",
+            "returnType": "(void)"
+        }|*/
         this.on("dragenter", callback);
     });
     _ah("dragleave", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger dragleave event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragleave"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger dragleave event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragleave",
+            "returnType": "(void)"
+        }|*/
         this.on("dragleave", callback);
     });
     _ah("dragover", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger dragover event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragover"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger dragover event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragover",
+            "returnType": "(void)"
+        }|*/
         this.on("dragover", callback);
     });
     _ah("dragstart", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger dragstart event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragstart"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger dragstart event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.dragstart",
+            "returnType": "(void)"
+        }|*/
         this.on("dragstart", callback);
     });
     _ah("drop", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger drop event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.drop"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger drop event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.drop",
+            "returnType": "(void)"
+        }|*/
         this.on("drop", callback);
     });
     _ah("focus", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger focus event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.focus"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger focus event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.focus",
+            "returnType": "(void)"
+        }|*/
         this.on("focus", callback);
     });
     _ah("formchange", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger formchange event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.formchange"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger formchange event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.formchange",
+            "returnType": "(void)"
+        }|*/
         this.on("formchange", callback);
     });
     _ah("forminput", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger forminput event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.forminput"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger forminput event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.forminput",
+            "returnType": "(void)"
+        }|*/
         this.on("forminput", callback);
     });
     _ah("getContainer", function (tagName) {
-        /*|  {info: "HTMLElement class extension to retrieve direct parent",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {tagName: "(String) Used to get the direct parent with a specific HTML tag"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.getContainer"},
-         *    returnType: “(HTMLElement)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to retrieve direct parent",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"tagName": "(String) Used to get the direct parent with a specific HTML tag"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.getContainer",
+            "returnType": "(HTMLElement)"
+        }|*/
         try {
             var thiss = this.parentNode;
             if (tagName) {
@@ -6495,14 +9058,15 @@ if (__thisIsNewer) {
         }
     });
     _ah("hasClass", function(name) {
-        /*|  {info: "HTMLElement class extension to check if element has the specified class",
-         *    category: "HTMLElement",
-         *    parameters:[
-         *        {name: "(String) Class name to check"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.hasClass"},
-         *    returnType: “()”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to check if element has the specified class",
+            "category": "HTMLElement",
+            "parameters":[
+                {"name": "(String) Class name to check"}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.hasClass",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var regex = new RegExp('((^)|(\\s+))' + name + '(\\s+|$)');
             return regex.test(this.className);
@@ -6512,13 +9076,16 @@ if (__thisIsNewer) {
         }
     });
     _ah("height", function(isBody) {
-        /*|  {info: "HTMLElement class extension to get the pixel height as a number",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.height"},
-         *    returnType: “(Number)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to get the pixel height as a number",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.height",
+            "returnType": "(Number)"
+        }|*/
         try {
             return _getDimension.call(this, isBody, 'height');
         } catch (e) {
@@ -6527,13 +9094,16 @@ if (__thisIsNewer) {
         }
     });
     _ah("hide", function() {
-        /*|  {info: "HTMLElement class extension to hide (display:none;) the element",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.hide"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to hide (display:none;) the element",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.hide",
+            "returnType": "(Bool)"
+        }|*/
         try {
             if (this.tagName.toLowerCase() == "object") {
                 this.style.visibility = "hidden";
@@ -6552,14 +9122,17 @@ if (__thisIsNewer) {
         }
     });
     _ah("insertAfter", function (refElem){
-        /*|  {info: "HTMLElement class extension to insert element after another",
-         *    category: "HTMLElement",
-         *    parameters:[
-         *        {refElem: "(HTMLElement) Reference HTML element to insert after"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.insertAfter"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to insert element after another",
+            "category": "HTMLElement",
+            "parameters":[
+                {"refElem": "(HTMLElement) Reference HTML element to insert after"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.insertAfter",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var next = $c.isFunction(refElem.nextElementSibling) ? refElem.nextElementSibling() : refElem.nextElementSibling;
             next ? refElem.parentNode.insertBefore(this, next) : refElem.parentNode.appendChild(this);
@@ -6570,33 +9143,37 @@ if (__thisIsNewer) {
         }
     });
     _ah("input", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger input event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.input"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger input event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.input",
+            "returnType": "(void)"
+        }|*/
         this.on("input", callback);
     });
     _ah("insertAlphabetically", function (elem) {
-        /*|  {info: "HTMLElement class extension to insert element alphabetically by id attribute",
-         *    category: "HTMLElement",
-         *    parameters:[
-         *        {elem: "(HTMLElement) Element to insert"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.insertAlphabetically"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to insert element alphabetically by id attribute",
+            "category": "HTMLElement",
+            "parameters":[
+                {"elem": "(HTMLElement) Element to insert"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.insertAlphabetically",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var childNodes = this.children,
-            eid = elem.id.toLowerCase(),
-            arr = Array(),
-            index = -1;
+                eid = elem.id.toLowerCase(),
+                arr = [],
+                index = -1;
 
             for (var i = 0; i < childNodes.length; i++) {
                 arr[i] = childNodes[i].id.toLowerCase();
@@ -6616,15 +9193,18 @@ if (__thisIsNewer) {
         }
     });
     _ah("insertAt", function (elem, pos){
-        /*|  {info: "HTMLElement class extension to insert element at a specified index",
-         *    category: "HTMLElement",
-         *    parameters:[
-         *        {elem: "(HTMLElement) Element to insert"},
-         *        {pos: "(Int) Index to add element"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.insertAt"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to insert element at a specified index",
+            "category": "HTMLElement",
+            "parameters":[
+                {"elem": "(HTMLElement) Element to insert"},
+                {"pos": "(Int) Index to add element"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.insertAt",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var children = this.children;
             pos = pos || 0;
@@ -6642,69 +9222,103 @@ if (__thisIsNewer) {
         }
     });
     _ah("invalid", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger invalid event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.invalid"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger invalid event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.invalid",
+            "returnType": "(void)"
+        }|*/
         this.on("invalid", callback);
     });
+    _ah("isOrphan", function () {
+        /*|{
+            "info": "HTMLElement class extension to check if it is not part of the DOM tree",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.isOrphan",
+            "returnType": "(void)"
+        }|*/
+        try {
+            var node = this.parentNode,
+                dhtml = $CSS('html')[0];
+
+            while (node) {
+                if (node == dhtml) {
+                    return false;
+                }
+                node = node.parentNode;
+            }
+            return true;
+        } catch (e) {
+            error("DOM.isOrphan", e);
+            return undefined;
+        }
+    });
     _ah("keydown", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger keydown event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.keydown"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger keydown event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.keydown",
+            "returnType": "(void)"
+        }|*/
         this.on("keydown", callback);
     });
     _ah("keypress", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger keypress event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.keypress"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger keypress event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+            {"parameters":[
+                {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.keypress",
+            "returnType": "(void)"
+        }|*/
         this.on("keypress", callback);
     });
     _ah("keyup", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger keyup event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.keyup"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger keyup event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.keyup",
+            "returnType": "(void)"
+        }|*/
         this.on("keyup", callback);
     });
     _ah("left", function() {
-        /*|  {info: "HTMLElement class extension to get the pixel left as a number",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.left"},
-         *    returnType: “(Number)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to get the pixel left as a number",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.left",
+            "returnType": "(Number)"
+        }|*/
         try {
             return _getDimension.call(this, null, 'left');
         } catch (e) {
@@ -6713,101 +9327,108 @@ if (__thisIsNewer) {
         }
     });
     _ah("mousedown", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger mousedown event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.mousedown"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger mousedown event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.mousedown",
+            "returnType": "(void)"
+        }|*/
         this.on("mousedown", callback);
     });
     _ah("mousemove", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger mousemove event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.mousemove"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger mousemove event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.mousemove",
+            "returnType": "(void)"
+        }|*/
         this.on("mousemove", callback);
     });
     _ah("mouseout", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger mouseout event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.mouseout"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger mouseout event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.mouseout",
+            "returnType": "(void)"
+        }|*/
         this.on("mouseout", callback);
     });
     _ah("mouseover", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger mouseover event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.mouseover"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger mouseover event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.mouseover",
+            "returnType": "(void)"
+        }|*/
         this.on("mouseover", callback);
     });
     _ah("mouseup", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger mouseup event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.mouseup"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger mouseup event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.mouseup",
+            "returnType": "(void)"
+        }|*/
         this.on("mouseup", callback);
     });
     _ah("mousewheel", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger mousewheel event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.mousewheel"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger mousewheel event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.mousewheel",
+            "returnType": "(void)"
+        }|*/
         this.on("mousewheel", callback);
     });
     _ah("moveDown", function (tagName) {
-        /*|  {info: "HTMLElement class extension to move an element after the next sibling",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {tagName: "(String) Used to get next sibling with a specific HTML tag"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.moveDown"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to move an element after the next sibling",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"tagName": "(String) Used to get next sibling with a specific HTML tag"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.moveDown",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var thiss = this;
             while (!isNull(thiss.nextSibling) && (thiss.nextSibling.nodeType != 1 || (tagName && thiss.nextSibling.tagName.toLowerCase() != tagName))) {
@@ -6825,17 +9446,18 @@ if (__thisIsNewer) {
         }
     });
     _ah("moveUp", function (tagName) {
-        /*|  {info: "HTMLElement class extension to move an element before the previous sibling",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {tagName: "(String) Used to get previous sibling with a specific HTML tag"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.moveUp"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to move an element before the previous sibling",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"tagName": "(String) Used to get previous sibling with a specific HTML tag"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.moveUp",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var thiss = this;
             while (!isNull(thiss.previousSibling) && (thiss.previousSibling.nodeType != 1 || (tagName && thiss.previousSibling.tagName.toLowerCase() != tagName))) {
@@ -6853,19 +9475,20 @@ if (__thisIsNewer) {
         }
     });
     _ah("on", function (evt, callback, evtObj) {
-        /*|  {info: "HTMLElement class extension to handle and trigger events",
-         *    category: "HTMLElement",
-         *    parameters:[
-         *      {event: "(String) Event name"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {event:"(String) Event name"},
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.input"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger events",
+            "category": "HTMLElement",
+            "parameters":[
+                {"event": "(String) Event name"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"event":"(String) Event name"},
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.input",
+            "returnType": "(void)"
+        }|*/
         if (!callback) {
 //            return _trigger(this, evt);
             var funcs = this.events[evt], func, i = 0;
@@ -6880,13 +9503,16 @@ if (__thisIsNewer) {
         }
     });
     _ah("remove", function () {
-        /*|  {info: "HTMLElement class extension to remove the element from the DOM tree",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.remove"},
-         *    returnType: “(HTMLElement)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to remove the element from the DOM tree",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.remove",
+            "returnType": "(HTMLElement)"
+        }|*/
         try {
             return this.parentNode.removeChild(this);
         } catch (e) {
@@ -6895,77 +9521,108 @@ if (__thisIsNewer) {
         }
     });
     _ah("removeClass", function(names) {
-        /*|  {info: "HTMLElement class extension to remove a class from the DOM object",
-         *    category: "HTMLElement",
-         *    parameters:[
-         *        {names: "(String[]) Name of the class to remove"}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.removeClass"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to remove a class from the DOM object",
+            "category": "HTMLElement",
+            "parameters":[
+                {"names": "(String[]) Name of the class to remove"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.removeClass",
+            "returnType": "(Bool)"
+        }|*/
         try {
-            var arr = this.className.split(' '),
-            index = arr.indexOf(name);
-            if (index != -1) {
-                arr.splice(index,1);
-                this.className = arr.join(' ').trim();
+            names = $c.Array(names) ? names : [names];
+            var arr = this.className.split(' '),i = 0, name;
+            while(name = names[i++]) {
+                var index = arr.indexOf(name);
+                if (index != -1) {
+                    arr.splice(index, 1);
+                }
             }
+            this.className = arr.join(' ').trim();
             return true;
         } catch (e) {
             error("DOM.removeClass", e);
             return false;
         }
     });
+    _ah("replace", function (dom) {
+        /*|{
+            "info": "HTMLElement class extension to replace the DOM element",
+            "category": "HTMLElement",
+            "parameters":[
+                {"dom": "(HTMLElement) Element used to replace"}],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.replace",
+            "returnType": "(Bool)"
+        }|*/
+        try {
+            return this.parentNode.replaceChild(dom,this);
+        } catch (e) {
+            error("DOM.replace", e);
+            return false;
+        }
+    });
     _ah("reset", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger reset event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.reset"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger reset event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.reset",
+            "returnType": "(void)"
+        }|*/
         this.on("reset", callback);
     });
     _ah("scroll", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger scroll event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.scroll"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger scroll event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.scroll",
+            "returnType": "(void)"
+        }|*/
         this.on("scroll", callback);
     });
     _ah("select", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger select event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.select"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger select event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.select",
+            "returnType": "(void)"
+        }|*/
         this.on("select", callback);
     });
     _ah("show", function() {
-        /*|  {info: "HTMLElement class extension to show (display:block) the element",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.show"},
-         *    returnType: “(Bool,)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to show (display:block) the element",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.show",
+            "returnType": "(Bool)"
+        }|*/
         try {
             if (this.tagName.toLowerCase() == "object") {
                 this.style.visibility = "visible";
@@ -6983,31 +9640,35 @@ if (__thisIsNewer) {
         }
     });
     _ah("submit", function (callback) {
-        /*|  {info: "HTMLElement class extension to handle and trigger submit event",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.submit"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger submit event",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[
+                {"parameters":[
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.submit",
+            "returnType": "(void)"
+        }|*/
         this.on("submit", callback);
     });
     _ah("toggle", function() {
-        /*|  {info: "HTMLElement class extension to toggle show/hide on the element",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.hookEvent"},
-         *    returnType: “(Bool)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to toggle show/hide on the element",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.hookEvent",
+            "returnType": "(Bool)"
+        }|*/
         try {
             var style = "visibility",
-            inheritedStyle,
-            parent = this.parentNode;
+                inheritedStyle,
+                parent = this.parentNode;
             this.tagName.toLowerCase() == "object" || (style = "display");
             // look for inherited style
             inheritedStyle = this.style[style] in {
@@ -7034,13 +9695,16 @@ if (__thisIsNewer) {
         }
     });
     _ah("top", function() {
-        /*|  {info: "HTMLElement class extension to get the pixel top as a number",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.top"},
-         *    returnType: “(Number)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to get the pixel top as a number",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.top",
+            "returnType": "(Number)"
+        }|*/
         try {
             return _getDimension.call(this, null, 'top');
             //return this.getClientRects && this.getClientRects()[0].top <= this.offsetTop ? this.getClientRects()[0].top : this.offsetTop;
@@ -7050,13 +9714,16 @@ if (__thisIsNewer) {
         }
     });
     _ah("toString", function () {
-        /*|  {info: "HTMLElement class extension to conver the HTMLElement to a string representation",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.toString"},
-         *    returnType: “(String)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to conver the HTMLElement to a string representation",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.toString",
+            "returnType": "(String)"
+        }|*/
         try {
             var domElemContainer = $d.createElement('div');
             domElemContainer.appendChild(this.cloneNode(true));
@@ -7067,22 +9734,23 @@ if (__thisIsNewer) {
         }
     }, true);
     _ah("unbind", function (evt, func) {
-        /*|  {info: "HTMLElement class extension to handle and trigger events",
-         *    category: "HTMLElement",
-         *    parameters:[
-         *      {event: "(String) Event name"}],
-         *
-         *    overloads:[
-         *        {parameters:[
-         *            {event:"(String) Event name"},
-         *            {callback: "(Function) Callback function when triggered"}]}],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.input"},
-         *    returnType: “(void)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to handle and trigger events",
+            "category": "HTMLElement",
+            "parameters":[
+                {"event": "(String) Event name"}],
+
+            "overloads":[
+                {"parameters":[
+                    {"event":"(String) Event name"},
+                    {"callback": "(Function) Callback function when triggered"}]}],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.input",
+            "returnType": "(void)"
+        }|*/
         this.events = this.events || {};
         this.events[evt] = this.events[evt] || [];
-         if (func) {
+        if (func) {
             var index = this.events[evt].indexOfAlt(func, function (obj, value) {return(obj.toString() == value.toString());});
             index != -1 && this.events[evt].splice(index,1);
         } else {
@@ -7092,13 +9760,16 @@ if (__thisIsNewer) {
         !this.events[evt].length && this.removeAttribute("on"+evt);
     });
     _ah("width", function(isBody) {
-        /*|  {info: "HTMLElement class extension to get the pixel width as a number",
-         *    category: "HTMLElement",
-         *    parameters:[],
-         *
-         *    description: "http://www.craydent.com/library/1.8.0/docs#htmlelement.width"},
-         *    returnType: “(Number)”
-         * |*/
+        /*|{
+            "info": "HTMLElement class extension to get the pixel width as a number",
+            "category": "HTMLElement",
+            "parameters":[],
+
+            "overloads":[],
+
+            "description": "http://www.craydent.com/library/1.8.0/docs#htmlelement.width",
+            "returnType": "(Number)"
+        }|*/
         try {
             return _getDimension.call(this, isBody, 'width');
         } catch (e) {
@@ -7110,22 +9781,22 @@ if (__thisIsNewer) {
 
     /**
 
-    JSZip - A Javascript class for generating Zip files
-    <http://jszip.stuartk.co.uk>
+     JSZip - A Javascript class for generating Zip files
+     <http://jszip.stuartk.co.uk>
 
-    (c) 2009 Stuart Knightley <stuart [at] stuartk.co.uk>
-    Licenced under the GPLv3 and the MIT licences
+     (c) 2009 Stuart Knightley <stuart [at] stuartk.co.uk>
+     Licenced under the GPLv3 and the MIT licences
 
-    Usage:
-       zip = new JSZip();
-       zip.add("hello.txt", "Hello, World!").add("tempfile", "nothing");
-       zip.folder("images").add("smile.gif", base64Data, {base64: true});
-       zip.add("Xmas.txt", "Ho ho ho !", {date : new Date("December 25, 2007 00:00:01")});
-       zip.remove("tempfile");
+     Usage:
+     zip = new JSZip();
+     zip.add("hello.txt", "Hello, World!").add("tempfile", "nothing");
+     zip.folder("images").add("smile.gif", base64Data, {base64: true});
+     zip.add("Xmas.txt", "Ho ho ho !", {date : new Date("December 25, 2007 00:00:01")});
+     zip.remove("tempfile");
 
-       base64zip = zip.generate();
+     base64zip = zip.generate();
 
-    **/
+     **/
 
     function JSZip(compression) {
         // default : no compression
@@ -7219,7 +9890,7 @@ if (__thisIsNewer) {
             header: header,
             data: compressedData,
             dir: o.dir
-            };
+        };
 
         return this;
     };
@@ -7271,7 +9942,7 @@ if (__thisIsNewer) {
                     name: filename,
                     data: file.data,
                     dir: !!file.dir
-                    });
+                });
             }
         }
 
@@ -7342,21 +10013,21 @@ if (__thisIsNewer) {
             fileRecord = "\x50\x4b\x03\x04" + this.files[name].header + name + this.files[name].data;
 
             dirRecord = "\x50\x4b\x01\x02" +
-            // version made by (00: DOS)
+                // version made by (00: DOS)
             "\x14\x00" +
-            // file header (common to file and central directory)
+                // file header (common to file and central directory)
             this.files[name].header +
-            // file comment length
+                // file comment length
             "\x00\x00" +
-            // disk number start
+                // disk number start
             "\x00\x00" +
-            // internal file attributes TODO
+                // internal file attributes TO DO
             "\x00\x00" +
-            // external file attributes
+                // external file attributes
             (this.files[name].dir===true?"\x10\x00\x00\x00":"\x00\x00\x00\x00")+
-            // relative offset of local header
+                // relative offset of local header
             this.decToHex(fileOffset, 4) +
-            // file name
+                // file name
             name;
 
             fileOffset += fileRecord.length;
@@ -7372,19 +10043,19 @@ if (__thisIsNewer) {
 
         // end of central dir signature
         dirEnd = "\x50\x4b\x05\x06" +
-        // number of this disk
+            // number of this disk
         "\x00\x00" +
-        // number of the disk with the start of the central directory
+            // number of the disk with the start of the central directory
         "\x00\x00" +
-        // total number of entries in the central directory on this disk
+            // total number of entries in the central directory on this disk
         this.decToHex(files.length, 2) +
-        // total number of entries in the central directory
+            // total number of entries in the central directory
         this.decToHex(files.length, 2) +
-        // size of the central directory   4 bytes
+            // size of the central directory   4 bytes
         this.decToHex(dirData.length, 4) +
-        // offset of start of central directory with respect to the starting disk number
+            // offset of start of central directory with respect to the starting disk number
         this.decToHex(fileData.length, 4) +
-        // .ZIP file comment length
+            // .ZIP file comment length
         "\x00\x00";
 
         var zip = fileData + dirData + dirEnd;
@@ -7424,11 +10095,11 @@ if (__thisIsNewer) {
     };
 
     /**
-    *
-    *  Javascript crc32
-    *  http://www.webtoolkit.info/
-    *
-    **/
+     *
+     *  Javascript crc32
+     *  http://www.webtoolkit.info/
+     *
+     **/
 
     JSZip.prototype.crc32 = function(str, crc) {
 
@@ -7470,30 +10141,30 @@ if (__thisIsNewer) {
 
 
     JSZip.prototype.utf8encode = function(input) {
-            input = encodeURIComponent(input);
+        input = encodeURIComponent(input);
 
-            input = input.replace(/%.{2,2}/g, function(m) {
+        input = input.replace(/%.{2,2}/g, function(m) {
 
-                var hex = m.substring(1);
+            var hex = m.substring(1);
 
-                return String.fromCharCode(parseInt(hex,16));
+            return String.fromCharCode(parseInt(hex,16));
 
-            });
-            return input;
+        });
+        return input;
 
-        };
+    };
 
     /**
 
-    *
-    *  Base64 encode / decode
+     *
+     *  Base64 encode / decode
 
-    *  http://www.webtoolkit.info/
+     *  http://www.webtoolkit.info/
 
-    *
-    *  Hacked so that it doesn't utf8 en/decode everything
+     *
+     *  Hacked so that it doesn't utf8 en/decode everything
 
-    **/
+     **/
 
     var JSZipBase64 = function() {
         // private property
@@ -7503,8 +10174,8 @@ if (__thisIsNewer) {
             // public method for encoding
             encode : function(input, utf8) {
                 var output = "",
-                chr1, chr2, chr3, enc1, enc2, enc3, enc4,
-                i = 0;
+                    chr1, chr2, chr3, enc1, enc2, enc3, enc4,
+                    i = 0;
 
                 while (i < input.length) {
                     chr1 = input.charCodeAt(i++);
@@ -7531,9 +10202,9 @@ if (__thisIsNewer) {
 
             decode : function(input, utf8) {
                 var output = "",
-                chr1, chr2, chr3,
-                enc1, enc2, enc3, enc4,
-                i = 0;
+                    chr1, chr2, chr3,
+                    enc1, enc2, enc3, enc4,
+                    i = 0;
 
                 input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
 
@@ -7561,161 +10232,161 @@ if (__thisIsNewer) {
         };
     }();
     /*
-        json2.js
-        2011-10-19
+     json2.js
+     2011-10-19
 
-        Public Domain.
+     Public Domain.
 
-        NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
+     NO WARRANTY EXPRESSED OR IMPLIED. USE AT YOUR OWN RISK.
 
-        See http://www.JSON.org/js.html
-
-
-        This code should be minified before deployment.
-        See http://javascript.crockford.com/jsmin.html
-
-        USE YOUR OWN COPY. IT IS EXTREMELY UNWISE TO LOAD CODE FROM SERVERS YOU DO
-        NOT CONTROL.
+     See http://www.JSON.org/js.html
 
 
-        This file creates a global JSON object containing two methods: stringify
-        and parse.
+     This code should be minified before deployment.
+     See http://javascript.crockford.com/jsmin.html
 
-            JSON.stringify(value, replacer, space)
-                value       any JavaScript value, usually an object or array.
-
-                replacer    an optional parameter that determines how object
-                            values are stringified for objects. It can be a
-                            function or an array of strings.
-
-                space       an optional parameter that specifies the indentation
-                            of nested structures. If it is omitted, the text will
-                            be packed without extra whitespace. If it is a number,
-                            it will specify the number of spaces to indent at each
-                            level. If it is a string (such as '\t' or '&nbsp;'),
-                            it contains the characters used to indent at each level.
-
-                This method produces a JSON text from a JavaScript value.
-
-                When an object value is found, if the object contains a toJSON
-                method, its toJSON method will be called and the result will be
-                stringified. A toJSON method does not serialize: it returns the
-                value represented by the name/value pair that should be serialized,
-                or undefined if nothing should be serialized. The toJSON method
-                will be passed the key associated with the value, and this will be
-                bound to the value
-
-                For example, this would serialize Dates as ISO strings.
-
-                    Date.prototype.toJSON = function (key) {
-                        function f(n) {
-                            // Format integers to have at least two digits.
-                            return n < 10 ? '0' + n : n;
-                        }
-
-                        return this.getUTCFullYear()   + '-' +
-                             f(this.getUTCMonth() + 1) + '-' +
-                             f(this.getUTCDate())      + 'T' +
-                             f(this.getUTCHours())     + ':' +
-                             f(this.getUTCMinutes())   + ':' +
-                             f(this.getUTCSeconds())   + 'Z';
-                    };
-
-                You can provide an optional replacer method. It will be passed the
-                key and value of each member, with this bound to the containing
-                object. The value that is returned from your method will be
-                serialized. If your method returns undefined, then the member will
-                be excluded from the serialization.
-
-                If the replacer parameter is an array of strings, then it will be
-                used to select the members to be serialized. It filters the results
-                such that only members with keys listed in the replacer array are
-                stringified.
-
-                Values that do not have JSON representations, such as undefined or
-                functions, will not be serialized. Such values in objects will be
-                dropped; in arrays they will be replaced with null. You can use
-                a replacer function to replace those with JSON values.
-                JSON.stringify(undefined) returns undefined.
-
-                The optional space parameter produces a stringification of the
-                value that is filled with line breaks and indentation to make it
-                easier to read.
-
-                If the space parameter is a non-empty string, then that string will
-                be used for indentation. If the space parameter is a number, then
-                the indentation will be that many spaces.
-
-                Example:
-
-                text = JSON.stringify(['e', {pluribus: 'unum'}]);
-                // text is '["e",{"pluribus":"unum"}]'
+     USE YOUR OWN COPY. IT IS EXTREMELY UNWISE TO LOAD CODE FROM SERVERS YOU DO
+     NOT CONTROL.
 
 
-                text = JSON.stringify(['e', {pluribus: 'unum'}], null, '\t');
-                // text is '[\n\t"e",\n\t{\n\t\t"pluribus": "unum"\n\t}\n]'
+     This file creates a global JSON object containing two methods: stringify
+     and parse.
 
-                text = JSON.stringify([new Date()], function (key, value) {
-                    return this[key] instanceof Date ?
-                        'Date(' + this[key] + ')' : value;
-                });
-                // text is '["Date(---current time---)"]'
+     JSON.stringify(value, replacer, space)
+     value       any JavaScript value, usually an object or array.
+
+     replacer    an optional parameter that determines how object
+     values are stringified for objects. It can be a
+     function or an array of strings.
+
+     space       an optional parameter that specifies the indentation
+     of nested structures. If it is omitted, the text will
+     be packed without extra whitespace. If it is a number,
+     it will specify the number of spaces to indent at each
+     level. If it is a string (such as '\t' or '&nbsp;'),
+     it contains the characters used to indent at each level.
+
+     This method produces a JSON text from a JavaScript value.
+
+     When an object value is found, if the object contains a toJSON
+     method, its toJSON method will be called and the result will be
+     stringified. A toJSON method does not serialize: it returns the
+     value represented by the name/value pair that should be serialized,
+     or undefined if nothing should be serialized. The toJSON method
+     will be passed the key associated with the value, and this will be
+     bound to the value
+
+     For example, this would serialize Dates as ISO strings.
+
+     Date.prototype.toJSON = function (key) {
+     function f(n) {
+     // Format integers to have at least two digits.
+     return n < 10 ? '0' + n : n;
+     }
+
+     return this.getUTCFullYear()   + '-' +
+     f(this.getUTCMonth() + 1) + '-' +
+     f(this.getUTCDate())      + 'T' +
+     f(this.getUTCHours())     + ':' +
+     f(this.getUTCMinutes())   + ':' +
+     f(this.getUTCSeconds())   + 'Z';
+     };
+
+     You can provide an optional replacer method. It will be passed the
+     key and value of each member, with this bound to the containing
+     object. The value that is returned from your method will be
+     serialized. If your method returns undefined, then the member will
+     be excluded from the serialization.
+
+     If the replacer parameter is an array of strings, then it will be
+     used to select the members to be serialized. It filters the results
+     such that only members with keys listed in the replacer array are
+     stringified.
+
+     Values that do not have JSON representations, such as undefined or
+     functions, will not be serialized. Such values in objects will be
+     dropped; in arrays they will be replaced with null. You can use
+     a replacer function to replace those with JSON values.
+     JSON.stringify(undefined) returns undefined.
+
+     The optional space parameter produces a stringification of the
+     value that is filled with line breaks and indentation to make it
+     easier to read.
+
+     If the space parameter is a non-empty string, then that string will
+     be used for indentation. If the space parameter is a number, then
+     the indentation will be that many spaces.
+
+     Example:
+
+     text = JSON.stringify(['e', {pluribus: 'unum'}]);
+     // text is '["e",{"pluribus":"unum"}]'
 
 
-            JSON.parse(text, reviver)
-                This method parses a JSON text to produce an object or array.
-                It can throw a SyntaxError exception.
+     text = JSON.stringify(['e', {pluribus: 'unum'}], null, '\t');
+     // text is '[\n\t"e",\n\t{\n\t\t"pluribus": "unum"\n\t}\n]'
 
-                The optional reviver parameter is a function that can filter and
-                transform the results. It receives each of the keys and values,
-                and its return value is used instead of the original value.
-                If it returns what it received, then the structure is not modified.
-                If it returns undefined then the member is deleted.
-
-                Example:
-
-                // Parse the text. Values that look like ISO date strings will
-                // be converted to Date objects.
-
-                myData = JSON.parse(text, function (key, value) {
-                    var a;
-                    if (typeof value === 'string') {
-                        a =
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}(?:\.\d*)?)Z$/.exec(value);
-                        if (a) {
-                            return new Date(Date.UTC(+a[1], +a[2] - 1, +a[3], +a[4],
-                                +a[5], +a[6]));
-                        }
-                    }
-                    return value;
-                });
-
-                myData = JSON.parse('["Date(09/09/2001)"]', function (key, value) {
-                    var d;
-                    if (typeof value === 'string' &&
-                            value.slice(0, 5) === 'Date(' &&
-                            value.slice(-1) === ')') {
-                        d = new Date(value.slice(5, -1));
-                        if (d) {
-                            return d;
-                        }
-                    }
-                    return value;
-                });
+     text = JSON.stringify([new Date()], function (key, value) {
+     return this[key] instanceof Date ?
+     'Date(' + this[key] + ')' : value;
+     });
+     // text is '["Date(---current time---)"]'
 
 
-        This is a reference implementation. You are free to copy, modify, or
-        redistribute.
-    */
+     JSON.parse(text, reviver)
+     This method parses a JSON text to produce an object or array.
+     It can throw a SyntaxError exception.
+
+     The optional reviver parameter is a function that can filter and
+     transform the results. It receives each of the keys and values,
+     and its return value is used instead of the original value.
+     If it returns what it received, then the structure is not modified.
+     If it returns undefined then the member is deleted.
+
+     Example:
+
+     // Parse the text. Values that look like ISO date strings will
+     // be converted to Date objects.
+
+     myData = JSON.parse(text, function (key, value) {
+     var a;
+     if (typeof value === 'string') {
+     a =
+     /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2}(?:\.\d*)?)Z$/.exec(value);
+     if (a) {
+     return new Date(Date.UTC(+a[1], +a[2] - 1, +a[3], +a[4],
+     +a[5], +a[6]));
+     }
+     }
+     return value;
+     });
+
+     myData = JSON.parse('["Date(09/09/2001)"]', function (key, value) {
+     var d;
+     if (typeof value === 'string' &&
+     value.slice(0, 5) === 'Date(' &&
+     value.slice(-1) === ')') {
+     d = new Date(value.slice(5, -1));
+     if (d) {
+     return d;
+     }
+     }
+     return value;
+     });
+
+
+     This is a reference implementation. You are free to copy, modify, or
+     redistribute.
+     */
 
     /*jslint evil: true, regexp: true */
 
     /*members "", "\b", "\t", "\n", "\f", "\r", "\"", JSON, "\\", apply,
-        call, charCodeAt, getUTCDate, getUTCFullYear, getUTCHours,
-        getUTCMinutes, getUTCMonth, getUTCSeconds, hasOwnProperty, join,
-        lastIndex, length, parse, prototype, push, replace, slice, stringify,
-        test, toJSON, toString, valueOf
-    */
+     call, charCodeAt, getUTCDate, getUTCFullYear, getUTCHours,
+     getUTCMinutes, getUTCMonth, getUTCSeconds, hasOwnProperty, join,
+     lastIndex, length, parse, prototype, push, replace, slice, stringify,
+     test, toJSON, toString, valueOf
+     */
 
 
     // Create a JSON object only if one does not already exist. We create the
@@ -7739,36 +10410,36 @@ if (__thisIsNewer) {
             Date.prototype.toJSON = function (key) {
 
                 return isFinite(this.valueOf())
-                ? this.getUTCFullYear()     + '-' +
+                    ? this.getUTCFullYear()     + '-' +
                 f(this.getUTCMonth() + 1) + '-' +
                 f(this.getUTCDate())      + 'T' +
                 f(this.getUTCHours())     + ':' +
                 f(this.getUTCMinutes())   + ':' +
                 f(this.getUTCSeconds())   + 'Z'
-                : null;
+                    : null;
             };
 
             String.prototype.toJSON      =
-            Number.prototype.toJSON  =
-            Boolean.prototype.toJSON = function (key) {
-                return this.valueOf();
-            };
+                Number.prototype.toJSON  =
+                    Boolean.prototype.toJSON = function (key) {
+                        return this.valueOf();
+                    };
         }
 
         var cx = /[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-        escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
-        gap,
-        indent,
-        meta = {    // table of character substitutions
-            '\b': '\\b',
-            '\t': '\\t',
-            '\n': '\\n',
-            '\f': '\\f',
-            '\r': '\\r',
-            '"' : '\\"',
-            '\\': '\\\\'
-        },
-        rep;
+            escapable = /[\\\"\x00-\x1f\x7f-\x9f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,
+            gap,
+            indent,
+            meta = {    // table of character substitutions
+                '\b': '\\b',
+                '\t': '\\t',
+                '\n': '\\n',
+                '\f': '\\f',
+                '\r': '\\r',
+                '"' : '\\"',
+                '\\': '\\\\'
+            },
+            rep;
 
 
         function quote(string) {
@@ -7782,8 +10453,8 @@ if (__thisIsNewer) {
             return escapable.test(string) ? '"' + string.replace(escapable, function (a) {
                 var c = meta[a];
                 return typeof c === 'string'
-                ? c
-                : '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
+                    ? c
+                    : '\\u' + ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
             }) + '"' : '"' + string + '"';
         }
 
@@ -7793,12 +10464,12 @@ if (__thisIsNewer) {
             // Produce a string from holder[key].
 
             var i,          // The loop counter.
-            k,          // The member key.
-            v,          // The member value.
-            length,
-            mind = gap,
-            partial,
-            value = holder[key];
+                k,          // The member key.
+                v,          // The member value.
+                length,
+                mind = gap,
+                partial,
+                value = holder[key];
 
             // If the value has a toJSON method, call it to obtain a replacement value.
 
@@ -7868,10 +10539,10 @@ if (__thisIsNewer) {
                         // brackets.
 
                         v = partial.length === 0
-                        ? '[]'
-                        : gap
-                        ? '[\n' + gap + partial.join(',\n' + gap) + '\n' + mind + ']'
-                        : '[' + partial.join(',') + ']';
+                            ? '[]'
+                            : gap
+                            ? '[\n' + gap + partial.join(',\n' + gap) + '\n' + mind + ']'
+                            : '[' + partial.join(',') + ']';
                         gap = mind;
                         return v;
                     }
@@ -7907,10 +10578,10 @@ if (__thisIsNewer) {
                     // and wrap them in braces.
 
                     v = partial.length === 0
-                    ? '{}'
-                    : gap
-                    ? '{\n' + gap + partial.join(',\n' + gap) + '\n' + mind + '}'
-                    : '{' + partial.join(',') + '}';
+                        ? '{}'
+                        : gap
+                        ? '{\n' + gap + partial.join(',\n' + gap) + '\n' + mind + '}'
+                        : '{' + partial.join(',') + '}';
                     gap = mind;
                     return v;
             }
@@ -7939,7 +10610,7 @@ if (__thisIsNewer) {
                         indent += ' ';
                     }
 
-                // If the space parameter is a string, it will be used as the indent string.
+                    // If the space parameter is a string, it will be used as the indent string.
 
                 } else if (typeof space === 'string') {
                     indent = space;
@@ -7950,7 +10621,7 @@ if (__thisIsNewer) {
 
                 rep = replacer;
                 if (replacer && typeof replacer !== 'function' && (typeof replacer === 'string' && replacer.trim()) &&
-                        (typeof replacer !== 'object' || typeof replacer.length !== 'number')) {
+                    (typeof replacer !== 'object' || typeof replacer.length !== 'number')) {
                     throw new Error('JSON.stringify');
                 }
 
@@ -8005,7 +10676,7 @@ if (__thisIsNewer) {
                 if (cx.test(text)) {
                     text = text.replace(cx, function (a) {
                         return '\\u' +
-                        ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
+                            ('0000' + a.charCodeAt(0).toString(16)).slice(-4);
                     });
                 }
 
@@ -8023,9 +10694,9 @@ if (__thisIsNewer) {
                 // ',' or ':' or '{' or '}'. If that is so, then the text is safe for eval.
 
                 if (/^[\],:{}\s]*$/
-                    .test(text.replace(/\\(?:["\\\/bfnrt]|u[0-9a-fA-F]{4})/g, '@')
-                        .replace(/"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g, ']')
-                        .replace(/(?:^|:|,)(?:\s*\[)+/g, ''))) {
+                        .test(text.replace(/\\(?:["\\\/bfnrt]|u[0-9a-fA-F]{4})/g, '@')
+                            .replace(/"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g, ']')
+                            .replace(/(?:^|:|,)(?:\s*\[)+/g, ''))) {
 
                     // In the third stage we use the eval function to compile the text into a
                     // JavaScript structure. The '{' operator is subject to a syntactic ambiguity
@@ -8038,10 +10709,10 @@ if (__thisIsNewer) {
                     // each name/value pair to a reviver function for possible transformation.
 
                     return typeof reviver === 'function'
-                    ? walk({
+                        ? walk({
                         '': j
                     }, '')
-                    : j;
+                        : j;
                 }
 
                 // If the text is not JSON parseable, then a SyntaxError is thrown.

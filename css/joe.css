@@ -587,7 +587,7 @@
     -ms-user-select: none;
     user-select: none;
 }
-.joe-overlay{
+.joe-overlay,joe-overlay{
     font-family:Cambria, "Hoefler Text", "Liberation Serif", Times, "Times New Roman", serif;
     /* font-family:'Segoe UI', 'Segoe UI Web Regular', 'Segoe UI Symbol', 'Helvetica Neue', 'BBAlpha Sans', 'S60 Sans', Arial, sans-serif;*/
     color: #068;
@@ -650,20 +650,43 @@
     background-repeat:no-repeat;
 }
 
+/* ------------------------- BEGin JOE-BUTTON ---------------------*/
 
-.joe-title{
+.joe-title, joe-title{
     font-weight: bold;
     font-size: 1.1em;
+    display:block;
+    padding-bottom:4px;
 }
-.joe-subtext{
-    font-size:.8em;
+
+.joe-subtitle, joe-subtitle{
+    font-size:.9em;
+    padding:2px 0
+}
+
+joe-content{
+    display:block;
+    font-weight:normal;
+    font-size:.9em;
+}
+.joe-subtext, joe-subtext{
+    font-size:.7em;
     font-weight: normal;
-    opacity: .6;
+    opacity: .7;
     color:#024;
+    display:block;
+
 }
-.joe-fright{  float:right;  }
-.joe-fleft{  float:left;  }
+/* ------------------------- end JOE TEXT ---------------------*/
+
+.joe-fright,joe-fright{  float:right;  }
+.joe-fleft,joe-fleft{  float:left;  }
 .joe-nofloat{  float:none;  }
+.joe-clear,joe-clear{
+    clear:both; display:block;
+}
+.joe-full-right,joe-full-right{float:right;text-align:right;}
+
 .joe-absolute{
     position:absolute;
     top:0;
@@ -703,9 +726,8 @@
 .debug-div.ok,.debug-div:hover{
     background:rgba(50,200,0,.5);
 }
-/*-------------------------
-	JOE Button
--------------------------*/
+
+/* ------------------------- BEGin JOE-BUTTON ---------------------*/
 .joe-panel-menu {
     padding: 0 1px 2px 1px;
 }
@@ -728,12 +750,9 @@
     font-size:14px;
     padding:2px;
 }
-
-
 .joe-button.center{text-align:center;}
 .joe-button.right{text-align:right;}
 .joe-button.light{color:#eee;}
-
 
 .joe-confirm-button,.joe-green-button{background-color:#6BB476 !important;}
 .joe-button.joe-confirm-button:hover, .joe-button.joe-green-button:hover{background-color:#5BD16D !important;}
@@ -776,26 +795,6 @@
 
 }
 
-/*
-.joe-iconed-button {
-  padding-left: 0;
-  background-position: center center;
-  color: rgba(0,0,0,0);
-  width: 50px;
-  padding: 0;
-}
-
-.joe-iconed-button:hover {
-  padding-left: 42px;
-  width: auto;
-  padding-right: 10px;
-  color: rgba(0,0,0,1);
-  background-position: left center;
-}
-
-*/
-
-
 .joe-history-button{background-image: url("../img/btns/history.png");  }
 .joe-comments-button{background-image: url("../img/btns/comment.png");  }
 .joe-object-button{background-image: url("../img/btns/object.png");  }
@@ -814,7 +813,9 @@
 .joe-view-button{background-image: url("../img/btns/view.png");  }
 .joe-sidebar_right-button{background-image: url("../img/btns/sidebar-right.png");  }
 .joe-sidebar_left-button{background-image: url("../img/btns/sidebar-left.png");  }
+/* ------------------------- END JOE-BUTTON ---------------------*/
 
+/* ------------------------- BEGin JOE-BLOCK-BUTTON ---------------------*/
 .joe-block-button {
     background-color: rgba(0,0,0,.1);
     width: 40px;
@@ -838,6 +839,8 @@
 .joe-block-button:hover{
     opacity:.9;
 }
+/* ------------------------- END JOE-BLOCK-BUTTON ---------------------*/
+
 .goto-icon{
     background-image:url("../img/goto-arrow.png");
 }
@@ -884,8 +887,6 @@
     left:0;
     bottom:0;
     right:0;
-    box-shadow:0 0 4px 0 rgba(0,0,0,.7);
-    margin:10px;
     transition: .25s;
 }
 .joe-overlay-panel.offscreen-bottom{
@@ -896,6 +897,12 @@
     top:50%;
     bottom:50%;
     overflow:hidden;
+}
+
+body >.joe-overlay-panel,
+.joe-overlay-panel.shadowed{
+    box-shadow:0 0 4px 0 rgba(0,0,0,.7);
+    margin:10px;
 }
 
 .joe-panel{
@@ -1107,6 +1114,13 @@ Subset Selector
 }
 .joe-submenu-search {
     float: left;
+}
+
+/*---------------------------------------
+  Speech Recognition
+---------------------------------------*/
+.joe-panel-speech .wit-microphone{
+  
 }
 
 /*------------------------------------------------------------------
@@ -1567,7 +1581,8 @@ input.joe-submenu-search-field {
     color:#fff;
 }
 
-.joe-panel-content-option-content:active .joe-subtext{
+.joe-panel-content-option-content:active .joe-subtext,
+.joe-panel-content-option-content:active joe-subtext{
     color:#ddd;
 }
 
@@ -1777,43 +1792,7 @@ input.joe-boolean-field {
 	display: inline-block;
 	width: 100px;
 }*/
-.joe-field-label {
-    padding: 0 4px;
-    display: inline-block;
-    position: absolute;
-    top: -12px;
-    background-color: #fff;
-  /*  left: 5px;*/
-    left: 2px;
-    font-size:13px;
-    font-weight:700;
-}
 
-.joe-tooltip{
-    padding: 8px;
-    color: #999;
-    font-size:12px;
-}
-
-.joe-field-comment {
-    font-size: 13px;
-    padding: 5px 1px;
-    letter-spacing: .8px;
-    line-height: 16px;
-}
-
-.joe-overlay.sans .joe-field-comment {
-    font-size: 12px;
-    padding: 5px 1px;
-    letter-spacing: .8px;
-    line-height: 16px;
-    padding-top: 0;
-    padding-bottom: 8px;
-}
-
-.joe-field-comment .joe-button{
-    z-index:10;
-}
 /*-------------------------
     JOE Field list item
 -------------------------*/
@@ -1838,6 +1817,24 @@ input.joe-boolean-field {
 .joe-object-content {
     padding-top: 10px;
 }
+
+/*----------------------------- Begin Field Container -----------------------------*/
+.joe-field-container,
+joe-field-container{
+    min-width:240px;
+    padding: 1px 0;
+    display:block;
+}
+
+joe-field-container p {
+    margin: 0;
+    padding: 0;
+    padding-bottom: 10px;
+}
+/*----------------------------- End Field Container -----------------------------*/
+
+
+
 /*.joe-object-field{
 	margin: 5px;
 	border: 1px solid #f2f2f2;
@@ -1850,6 +1847,60 @@ input.joe-boolean-field {
     position: relative;
 /*    padding-top: 15px;*/
 }
+.joe-object-field.hide-label {
+    margin-top: 0;
+}
+/*----------------------------- Begin joe-field-label -----------------------------*/
+.joe-field-label {
+    padding: 0 4px;
+    display: inline-block;
+    position: absolute;
+    top: -12px;
+    background-color: #fff;
+    /*  left: 5px;*/
+    left: 2px;
+    font-size:13px;
+    font-weight:700;
+}
+
+.joe-highlighted .joe-field-label {
+    color: #DA8D01 !important;
+}
+.hide-label > .joe-field-label {
+    display: none;
+}
+/*----------------------------- End joe-field-label -----------------------------*/
+
+/*----------------------------- Begin joe-field-comment -----------------------------*/
+.joe-field-comment {
+    font-size: 13px;
+    padding: 5px 1px;
+    letter-spacing: .8px;
+    line-height: 16px;
+}
+
+.joe-overlay.sans .joe-field-comment {
+    font-size: 12px;
+    padding: 5px 1px;
+    letter-spacing: .8px;
+    line-height: 16px;
+    padding-top: 0;
+    padding-bottom: 8px;
+}
+
+.joe-field-comment .joe-button{
+    z-index:10;
+}
+/*----------------------------- End joe-field-comment -----------------------------*/
+.joe-tooltip{
+    padding: 8px;
+    color: #999;
+    font-size:12px;
+}
+
+
+
+
 /*-------------------------
 	Required
 -------------------------*/
@@ -1863,9 +1914,15 @@ input.joe-boolean-field {
     border-color: rgb(218, 141, 1);
     background: rgba(218, 141, 1,.2);
 }
-.joe-highlighted .joe-field-label {
-    color: #DA8D01 !important;
+
+
+
+/*----------------------------- Begin joe-field-attribute -----------------------------*/
+joe-field-attribute{
+    display:block;
 }
+/*----------------------------- End joe-field-attribute -----------------------------*/
+
 /*-------------------------
 	Label
 -------------------------*/
@@ -2231,7 +2288,7 @@ display:none;
     box-sizing:border-box;
     letter-spacing: .5px;
     width:100%;
-    max-width:800px;
+/*    max-width:800px;*/
 }
 
 .joe-object-field input[type=text]:focus {
@@ -2487,9 +2544,9 @@ textarea.joe-rendering-field{
 /*-------------------------
 	i | Image
 -------------------------*/
-input.joe-image-field{
+/*input.joe-image-field{
     width: 90% !important;
-}
+}*/
 .joe-image-field-image {
     margin: 15px 0 10px 0;
     display: block;
@@ -2655,14 +2712,6 @@ iframe.joe-preview-iframe {
     padding: 4px 5px;
     cursor: pointer;
     left:70%;
-}
-
-/*----------------------------->
-	Field Container
-<-----------------------------*/
-.joe-field-container{
-    min-width:240px;
-    padding: 1px 0;
 }
 
 

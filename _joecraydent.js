@@ -1,7 +1,7 @@
 /* JavaScript include for: Json Object Editor on Craydent.com
 last updated: CH December 2015
 */
-var includes = "", web_dir = '//www.craydent.com/jsonobjecteditor/';
+var includes = "", web_dir = 'http://www.craydent.com/jsonobjecteditor/';
 var joe_web_dir = web_dir,
 scripts_dir = web_dir+"js/",
 scripts = [];

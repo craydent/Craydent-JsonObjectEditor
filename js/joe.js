@@ -357,8 +357,17 @@ function JsonObjectEditor(specs){
 		else{self.current.callback = null;}
 
 
-	//setup schema
-		specs.schema = this.setSchema(schema);
+    /*-------------------------
+     String data
+     -------------------------*/
+    if($.type(data) == 'string' && datatype != "string" && self.getDataset(data,{boolean:true})){
+
+        if(!specs.schema && self.schemas[data]){
+            schema = data; }
+        data = self.getDataset(data);
+    }
+
+        /*setup schema*/ specs.schema = this.setSchema(schema);
 	//	specs.schema = ($.type(schema) == 'object')? schema : self.schemas[schema] || null;
 	//	self.current.schema = specs.schema;
 /*-------------------------
@@ -389,12 +398,7 @@ Column Count
 
     }
 
-/*-------------------------
- String
- -------------------------*/
-    if($.type(data) == 'string' && datatype != "string" && self.getDataset(data,{boolean:true})){
-        data = self.getDataset(data);
-    }
+
 
 /*-------------------------
  MultiEdit (Arrays)
@@ -601,18 +605,23 @@ Column Count
             var lcount = specs.list.length;
             if(self.current.subset){
                 lcount = specs.list.where(self.current.subset.filter).length;
+
+
             }
             titleObj._listCount =(lcount||'0');
+            titleObj._subsetName = self.current.subset && self.current.subset.name+' ' ||'';
         }
         self.current.title = specs.title || 'Json Object Editor';
-        var title = fillTemplate(self.current.title,titleObj);
+        var title = fillTemplate(self.propAsFuncOrValue(self.current.title),titleObj);
         titleObj.docTitle = title;
         return titleObj;
     }
 	this.renderEditorHeader = function(specs){
         var BM = new Benchmarker();
 		var specs = specs || {};
-		var titleObj = /*createTitleObject(specs);*/$.extend({},self.current.object)
+        var titleObj = createTitleObject(specs);
+        var title = titleObj.docTitle;
+/*		var titleObj = /!*createTitleObject(specs);*!/$.extend({},self.current.object)
 		if(specs.list){
             var lcount = specs.list.length;
             if(self.current.subset){
@@ -622,7 +631,8 @@ Column Count
 		}
         self.current.title = specs.title || 'Json Object Editor';
 		var title = fillTemplate(self.propAsFuncOrValue(self.current.title),titleObj);
-        titleObj.docTitle = title;
+        titleObj.docTitle = title;*/
+
         //show doctitle
         if(self.specs.documentTitle){
             var doctitle = (self.specs.documentTitle === true)?
@@ -724,6 +734,7 @@ Column Count
         self.current.subset = null;
         self.current.filters = {};
         self.current.fields = [];
+        self.current.schema = null;
 
     };
 	this.cleanUp = function(){
@@ -1697,10 +1708,10 @@ this.renderHTMLContent = function(specs){
             menu = __defaultObjectButtons;
             customMenu = false;
         }
-		if(typeof menu =='function'){
+		/*if(typeof menu =='function'){
 			menu = menu();
-		}
-
+		}*/
+        menu = self.propAsFuncOrValue(menu);
 
 		var html =
 		'<div class="joe-panel-footer">'+
@@ -1838,41 +1849,44 @@ this.renderHTMLContent = function(specs){
 			}
 		}
 		if(prop.width){
-			html+='<div class="joe-field-container joe-fleft" style="width:'+prop.width+';" data-side="'+propdside+'">';
+			html+='<joe-field-container class="joe-field-container joe-fleft" style="width:'+prop.width+';" data-side="'+propdside+'">';
 		}else{
-            html+='<div class="joe-field-container" data-side="'+propdside+'">';
+            html+='<joe-field-container class="joe-field-container" data-side="'+propdside+'">';
         }
 
         var fieldlabel = self.propAsFuncOrValue(prop.display||prop.label||prop.name);
+        var hiddenlabel = (prop.label === false)?' hide-label ':''; html+=
+        '<div class="joe-object-field '+hidden+' '+required+' '+prop.type+'-field '+hiddenlabel+'" data-type="'+prop.type+'" data-name="'+prop.name+'">'
+            +renderFieldAttribute('before')
 
-		html+=
-			'<div class="joe-object-field '+hidden+' '+required+' '+prop.type+'-field " data-type="'+prop.type+'" data-name="'+prop.name+'">'+
-			'<label class="joe-field-label" title="'+prop.name+'">'+(required && '*' ||'')
+            +'<label class="joe-field-label" title="'+prop.name+'">'+(required && '*' ||'')
                 +fillTemplate(fieldlabel,self.current.object)
-				+self.renderFieldTooltip(prop)
+                +self.renderFieldTooltip(prop)
             +'</label>';
-        //render comment
-        html+= self.renderFieldComment(prop);
-        //add multi-edit checkbox
-		if(self.current.userSpecs.multiedit){
-			html+='<div class="joe-field-multiedit-toggle" onclick="$(this).parent().toggleClass(\'multi-selected\')"></div>';
-		}
 
-		html += self.selectAndRenderFieldType(prop);
-        html += self.renderGotoLink(prop);
-        html+= renderFieldAfter();
+            //render comment
+            html+= self.renderFieldComment(prop);
+            //add multi-edit checkbox
+            if(self.current.userSpecs.multiedit){
+                html+='<div class="joe-field-multiedit-toggle" onclick="$(this).parent().toggleClass(\'multi-selected\')"></div>';
+            }
+
+            html += self.selectAndRenderFieldType(prop);
+            html += self.renderGotoLink(prop);
+            html+= renderFieldAttribute('after');
         html+='</div>';//close object field;
 
 		//if(prop.width){
         //close field container
-			html+='</div>';
+			html+='</joe-field-container>';
 	//	}
 
 
-        function renderFieldAfter(){
+        function renderFieldAttribute(attribute){
             var obj = (rerenderingField)?self.current.constructed:self.current.object;
-            return (prop.after &&
-            '<div class="joe-field-after">'+fillTemplate(self.propAsFuncOrValue(prop.after),obj)+'</div>'
+            var propval = prop[attribute];
+            return (propval &&
+            '<joe-field-attribute class="jfa-'+attribute+'">'+fillTemplate(self.propAsFuncOrValue(propval),obj)+'</joe-field-attribute>'
             ||'');
         }
 		preProp = prop;
@@ -2188,7 +2202,7 @@ this.renderHTMLContent = function(specs){
         var autocomplete = dom.next('.joe-text-autocomplete');
         var content,show
             needles = dom.val().toLowerCase().replace( /,/,' ').split(' ');
-            needles.removeAll('');
+            //needles.removeAll('');
 		autocomplete.find('.joe-text-autocomplete-option').each(function(i,obj){
             content = (obj.textContent===undefined) ? obj.innerText : obj.textContent;
             //content = obj.innerHTML;
@@ -2260,7 +2274,7 @@ this.renderHTMLContent = function(specs){
         var disabled = _disableField(prop); //(prop.locked &&'disabled')||'';
 		var html=/*
 		'<label class="joe-field-label">'+(prop.display||prop.name)+'</label>'+*/
-		'<input class="joe-number-field joe-field" type="text" '+disabled+' name="'+prop.name+'" value="'+(prop.value || '')+'"  '+
+		'<input class="joe-number-field joe-field" type="number" '+disabled+' name="'+prop.name+'" value="'+(prop.value || '')+'"  '+
 			self.renderFieldAttributes(prop,{onblur:'getJoe('+self.joe_index+').returnNumber(this);'})+
 		' />';
 		return html;
@@ -2692,11 +2706,11 @@ this.renderHTMLContent = function(specs){
 <-----------------------------*/
 	//TODO: progressively render bucket options.
 	this.renderBucketsField = function(prop){
-        /*
+        /*|{
         description:'renders buckets field',
         tags:'buckets,field,render',
         specs:['idprop','values','allowMultiple','template','bucketCount','bucketNames','bucketWidth']
-         */
+         }|*/
 
 		/*var values = ($.type(prop.values) == 'function')?prop.values(self.current.object):prop.values||[];*/
         var values = self.getFieldValues(prop.values);
@@ -2841,11 +2855,11 @@ this.renderHTMLContent = function(specs){
         }
     }
     this.renderBucketItem = function(item,fieldnameorobject,specs){
-        /*
+        /*|{
          description:'renders a single bucket item, either from an id string or a passed object. set specs.isobject to true to use an object. pass the fielname as second parameter.',
          tags:'buckets,item,render',
          specs:['isobject','idprop','template']
-         */
+         }|*/
         var fieldObj = ($.type(fieldnameorobject) == "object")?
             fieldnameorobject:
             self.getField(fieldnameorobject) || {};
@@ -3866,7 +3880,7 @@ Field Rendering Helpers
         var template = //getProperty('listSchema.'+listSchemaObjIndicator+'.template')
             (listSchema.listView && listSchema.listView.template) || listSchema._listTemplate;
         var title = //getProperty('listSchema.'+listSchemaObjIndicator+'.title')
-            (listSchema.listView && listSchema.listView.title) || listSchema._listTitle;
+            self.propAsFuncOrValue((listSchema.listView && listSchema.listView.title) || listSchema._listTitle,listItem);
 
         if(quick){
             var quicktitle = template || title || '';
@@ -4049,6 +4063,21 @@ Field Rendering Helpers
 		self.overlay.addClass('active');*/
 		goJoe(object,setts);
 	};
+    this.showList = function(view,subset,filter){
+        if($.type(view) == "string"){
+            view = {collection:view,schema:view};
+        }
+        view.subset = subset || null;
+        var showJoeListBenchmarker = new Benchmarker();
+        self.clearAuxiliaryData();
+        var dataList = self.Data[view.collection]||[];//NPC.kovm.Data[view.collection]();
+        if(filter){
+            dataList = dataList.where(filter);
+        }
+        goJoe(dataList,{schema:view.schema,subset:view.subset});
+
+        _bmResponse(showJoeListBenchmarker,'Joe View: "'+view.collection+'" shown');
+    };
 /*----------------------------->
 	List Multi Select
 <-----------------------------*/
@@ -5149,7 +5178,7 @@ Field Rendering Helpers
                             case 'ace':
                                 var editor = _joe.ace_editors[$(this).data('ace_id')];
                                 //$(this).find('.ace_editor');
-                                object[prop] = editor.getValue();
+                                object[prop] = (editor)? editor.getValue():self.current.object[prop];
                                 break;
                             case 'ckeditor':
                                 var editor = CKEDITOR.instances[$(this).data('ckeditor_id')];
@@ -5557,7 +5586,7 @@ ANALYSIS, IMPORT AND MERGE
                 'class':ref,
                 parameters:(comments && (comments.params || comments.parameters)) || params,
                 _id:ref+'_'+funcName,
-                comments:evalString,
+                comments:evalString||{},
                 itemtype:'method',
                 parent:parent||null
             };
@@ -5767,6 +5796,8 @@ ANALYSIS, IMPORT AND MERGE
             var useHash = useHash.replace('#','');
             var hashBreakdown = useHash.split(hash_delimiter).condense();
             //hashBreakdown.removeAll('');
+            hashBreakdown.remove('');
+            //BUGFIX: condense no longer removes blank strings.
             if(!hashBreakdown.length){
                 return false;
             }
@@ -6008,8 +6039,8 @@ K | Smart Schema Values
         duplicate:__duplicateBtn__
 
     };
-    this.buttons.next = {name:'next', display:'next >',css:'fright', action:getSelfStr+'.next()'};
-    this.buttons.previous = {name:'previous',display:'< prev', css:'fleft', action:getSelfStr+'.previous()'};
+    this.buttons.next = {name:'next', display:'next >',css:'joe-fright', action:getSelfStr+'.next()'};
+    this.buttons.previous = {name:'previous',display:'< prev', css:'joe-fleft', action:getSelfStr+'.previous()'};
 
 /*-------------------------------------------------------------------->
     //SPEECH RECOGNITION
@@ -6111,7 +6142,7 @@ logit(intent)
 		self.init();
 	}
 
-    self.getCurrentObject = function(construct){
+    self.getCurrentObject = function(construct,force){
         /*|{
         featured:true,
         description:'gets the current object JOE is editing, if construct, has current user updates.',
@@ -6119,7 +6150,7 @@ logit(intent)
         }|*/
         if(construct){
             var obj = self.constructObjectFromFields();
-            if(!obj[self.getIDProp()]){
+            if(!obj[self.getIDProp()] && !force){
                 return self.current.object;
             }
             return obj;
@@ -6164,7 +6195,9 @@ function _COUNT(array){
 	if(array.isArray()) {
 		return array.length;
 	}else if(array.isString()){
-        return 'str';
+        return array.length;
+    }else if(array.isFunction){
+        return array.toString().length;
     }
 	return 0;
 };
