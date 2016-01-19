@@ -66,7 +66,7 @@ function CraydentApp(specs){
     this.initInteractions = function(){
         $('capp-menu-label').click(function(){
             $(this).parent().toggleClass('expanded');
-        })
+        });
 
         $('capp-menu-toggle').click(function(){
             $('capp-wrapper').toggleClass('expanded');

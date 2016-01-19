@@ -28,9 +28,11 @@
 </head>
 
 <!--<body bgcolor="#5f9ea0">-->
-<body bgcolor="#4499aa">
+<body bgcolor="#0099aa">
 <capp-wrapper >
-	<capp-header class="capp-bg-light">
+	<capp-header class="capp-retro">
+		<capp-header-bonus ></capp-header-bonus>
+			<capp-craydent-icon></capp-craydent-icon>
 			<capp-title>Craydent API</capp-title>
 			<capp-button>button</capp-button>
 			<capp-menu>
@@ -49,8 +51,14 @@
 	</capp-header>
 	<capp-body class="menu-collapsed">
 		<capp-panel class="capp-bg-dark">
-			<capp-button onclick="$(this).parent().toggleClass('expanded');"><-></capp-button>
-			<capp-button>button</capp-button>
+			<capp-button  onclick="$(this).parent().toggleClass('expanded');">
+				<capp-button-icon><-></capp-button-icon>
+				<capp-button-label>expand / contract</capp-button-label>
+			</capp-button>
+			<capp-button>
+				<capp-button-icon>!</capp-button-icon>
+				<capp-button-label>Another Test Button</capp-button-label>
+			</capp-button>
 		</capp-panel>
 		<capp-view id="joeHolder"></capp-view>
 	</capp-body>

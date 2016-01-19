@@ -653,7 +653,7 @@
 /* ------------------------- BEGin JOE-BUTTON ---------------------*/
 
 .joe-title, joe-title{
-    font-weight: bold;
+    font-family: 'Segoe UI Semibold';
     font-size: 1.1em;
     display:block;
     padding-bottom:4px;
@@ -1044,14 +1044,14 @@ border: 1px inset #007ac2;
     height:40px;
 }
 .joe-panel-title{
-    font-weight: bold;
     padding: 5px;
-    color: #007ac2;
-    line-height:30px;
-
-    overflow:hidden;
-
+    color: #066;
+    line-height: 30px;
+    overflow: hidden;
+    font-size: 1.1em;
+    font-family: 'Segoe UI Semibold';
 }
+
 
 .joe-header-back-btn{
     background-position: -261px -11px;
