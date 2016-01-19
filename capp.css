@@ -43,27 +43,38 @@ capp-absoluteblock{
     box-sizing: border-box;
 }
 /*--------------------------- begin CAPP-BG --------------------------------*/
+/*light*/
 .capp-bg-light{
     background:rgba(255,255,255,.5);
     color:#333;
+}
+.capp-bg-light capp-button-icon svg path{
+    fill:#333;
 }
 .capp-bg-light.expanded:hover,
 .capp-bg-light.expanded capp-menu.expanded > capp-menu-label {
     background-color: rgba(255,255,255,.7);
 }
+.capp-bg-light *:hover,
+.capp-bg-light capp-button > capp-button-icon svg path{
+    background:rgba(255,255,255,.7);
+    coloe:#222;
+}
+/*dark*/
 .capp-bg-dark{
     background:rgba(0,0,0,.3);
     color:#ddd;
+}
+.capp-bg-dark capp-button-icon svg path{
+    fill:#ddd;
 }
 .capp-bg-dark.expanded:hover,
 .capp-bg-dark.expanded capp-menu.expanded > capp-menu-label{
     background-color: rgba(0,0,0,.7);
 }
-.capp-bg-light *:hover{
-    background:rgba(255,255,255,.7);
-    coloe:#222;
-}
-.capp-bg-dark *:hover{
+
+.capp-bg-dark *:hover,
+.capp-bg-dark capp-button > capp-button-icon svg path{
     background:rgba(0,0,0,.5);
     color:#eee;
 }
@@ -99,14 +110,22 @@ capp-button-icon {
     width: 50px;
     margin-left: -5px;
     text-align: center;
+    position: relative;
 }
 
 /*capp-button-label*/
 capp-button-label {
     display: none;
     visibility: hidden;
+    position: relative;
 }
 
+capp-button-icon svg{
+    width: 32px
+    height: 100%;
+}
+capp-button-icon svg path{
+}
 .expanded > capp-button > capp-button-label,
 .expanded > capp-menu > * > capp-button-label{
     display: block;
