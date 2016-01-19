@@ -121,7 +121,7 @@ capp-button-label {
 }
 
 capp-button-icon svg{
-    width: 32px
+    width: 32px;
     height: 100%;
 }
 capp-button-icon svg path{
