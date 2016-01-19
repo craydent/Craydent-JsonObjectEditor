@@ -45,26 +45,37 @@ capp-absoluteblock{
 /*--------------------------- begin CAPP-BG --------------------------------*/
 .capp-bg-light{
     background:rgba(255,255,255,.5);
-    color:#222;
+    color:#333;
 }
-.capp-bg-light.expanded:hover {
+.capp-bg-light.expanded:hover,
+.capp-bg-light.expanded capp-menu.expanded > capp-menu-label {
     background-color: rgba(255,255,255,.7);
 }
 .capp-bg-dark{
     background:rgba(0,0,0,.3);
     color:#ddd;
 }
-.capp-bg-dark.expanded:hover {
+.capp-bg-dark.expanded:hover,
+.capp-bg-dark.expanded capp-menu.expanded > capp-menu-label{
     background-color: rgba(0,0,0,.7);
 }
-.capp-bg-light *:hover{  background:rgba(255,255,255,.7);  }
-.capp-bg-dark *:hover{  background:rgba(0,0,0,.5);  }
+.capp-bg-light *:hover{
+    background:rgba(255,255,255,.7);
+    coloe:#222;
+}
+.capp-bg-dark *:hover{
+    background:rgba(0,0,0,.5);
+    color:#eee;
+}
 
 /*--------------------------- end CAPP-BG --------------------------------*/
 
 /*--------------------------- begin CAPP-WRAPPER --------------------------------*/
 capp-wrapper{
-
+background-image:url('/JsonObjectEditor/img/svgs/craydent-logo-darkoverlay.svg');
+    background-size:50%;
+    background-repeat: no-repeat;
+    background-position: center;
 }
 /*--------------------------- end CAPP-WRAPPER --------------------------------*/
 capp-button,capp-menu{
@@ -96,7 +107,8 @@ capp-button-label {
     visibility: hidden;
 }
 
-.expanded > capp-button > capp-button-label {
+.expanded > capp-button > capp-button-label,
+.expanded > capp-menu > * > capp-button-label{
     display: block;
     visibility: visible;
 }
@@ -104,9 +116,14 @@ capp-button-label {
 
 /*--------------------------- begin CAPP-MENU --------------------------------*/
 capp-menu{
+    transition:.2s;
+
 }
 capp-menu > *{
     padding:0 5px;
+}
+capp-menu.expanded{
+    height:auto;
 }
 .capp-retro capp-menu.expanded{
     background-color: rgba(255,255,255,.8);
@@ -115,17 +132,22 @@ capp-menu > *{
 /*capp-menu-label*/
 capp-menu-label{
     transition:.2s;
+    overflow: hidden;
+    height: 50px;
 }
 capp-header > capp-menu > capp-menu-label {
     padding: 0 10px;
 }
-.capp-retro capp-menu-label:hover {
+.capp-retro capp-menu-label:hover,
+.capp-retro capp-menu.expanded > capp-menu-label{
     padding-bottom: 6px;
 }
 
 /*capp-menu-option*/
 capp-menu-option{
     display:none;
+    overflow: hidden;
+    transition:.2s;
 }
 capp-menu.expanded > capp-menu-option{
     display:block;
@@ -266,9 +288,15 @@ capp-panel > *{
     height:50px;
 }
 
+capp-panel > *:after {
+    content:'';
+    display:block;
+    clear: both;
+}
 .capp-panel-toggle{
     text-align:center;
 }
+
 
 /*---------------------------end CAPP-PANEL --------------------------------*/
 

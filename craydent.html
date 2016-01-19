@@ -51,7 +51,7 @@
 	</capp-header>
 	<capp-body class="menu-collapsed">
 		<capp-panel class="capp-bg-dark">
-			<capp-button  onclick="$(this).parent().toggleClass('expanded');">
+			<capp-button  class="capp-panel-toggle">
 				<capp-button-icon><-></capp-button-icon>
 				<capp-button-label>expand / contract</capp-button-label>
 			</capp-button>
@@ -59,6 +59,44 @@
 				<capp-button-icon>!</capp-button-icon>
 				<capp-button-label>Another Test Button</capp-button-label>
 			</capp-button>
+			<!-- METHODS -->
+			<capp-menu>
+				<capp-menu-label>
+					<capp-button-icon>ƒ</capp-button-icon>
+					<capp-button-label>Class Methods</capp-button-label>
+				</capp-menu-label>
+				<capp-menu-option onclick="capp.Views.show('method','Craydent')">
+					<capp-button-icon>JS</capp-button-icon>
+					<capp-button-label>Craydent.JS</capp-button-label>
+				</capp-menu-option>
+				<capp-menu-option onclick="capp.Views.show('method','JOE')">
+					<capp-button-icon>JOE</capp-button-icon>
+					<capp-button-label>JsonObjectEditor</capp-button-label>
+				</capp-menu-option>
+				<capp-menu-option onclick="capp.Views.show('method','Catnap')">
+					<capp-button-icon>CN</capp-button-icon>
+					<capp-button-label>Catnap</capp-button-label>
+				</capp-menu-option>
+			</capp-menu>
+			<!-- PROPERTIES -->
+			<capp-menu>
+				<capp-menu-label>
+					<capp-button-icon>Props</capp-button-icon>
+					<capp-button-label>Exposed Properties</capp-button-label>
+				</capp-menu-label>
+				<capp-menu-option onclick="capp.Views.show('property','Craydent')">
+					<capp-button-icon>JS</capp-button-icon>
+					<capp-button-label>Craydent.JS</capp-button-label>
+				</capp-menu-option>
+				<capp-menu-option onclick="capp.Views.show('property','JOE')">
+					<capp-button-icon>JOE</capp-button-icon>
+					<capp-button-label>JsonObjectEditor</capp-button-label>
+				</capp-menu-option>
+				<capp-menu-option onclick="capp.Views.show('property','Catnap')">
+					<capp-button-icon>CN</capp-button-icon>
+					<capp-button-label>Catnap</capp-button-label>
+				</capp-menu-option>
+			</capp-menu>
 		</capp-panel>
 		<capp-view id="joeHolder"></capp-view>
 	</capp-body>

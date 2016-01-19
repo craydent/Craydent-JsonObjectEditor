@@ -65,12 +65,30 @@ function CraydentApp(specs){
 
     this.initInteractions = function(){
         $('capp-menu-label').click(function(){
-            $(this).parent().toggleClass('expanded');
-        });
+            $(this).parent().toggleClass('expanded').siblings().removeClass('expanded');
 
+        });
+        $('capp-panel capp-menu-label').on('dblclick',function(){
+            $(this).parents('capp-panel').toggleClass('expanded');
+        });
+        $('capp-panel-toggle,.capp-panel-toggle').click(function(){
+            $(this).parents('capp-panel').toggleClass('expanded');
+        });
         $('capp-menu-toggle').click(function(){
             $('capp-wrapper').toggleClass('expanded');
-        })
+        });
+        $('capp-panel').hover(
+            function(){
+                $(this).addClass('capp-targeted');
+                window.__cpt = setTimeout(function(){
+                    $('.capp-targeted').addClass('expanded');
+            },1000)}
+            ,function(){
+
+                clearTimeout(window.__cpt);
+                $('.capp-targeted').removeClass('expanded').removeClass('capp-targeted');
+            }
+        )
     };
 
     if(specs.autoInit){
