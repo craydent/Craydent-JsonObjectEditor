@@ -4,7 +4,7 @@ last updated: CH March 2014
 
 var includes = "",
 projectName = 'JsonObjectEditor',
-web_dir = '//' + location.hostname + ':' + location.port + "/" + projectName + '/';
+web_dir = '//' + location.hostname + ':' + location.port||'80' + "/" + projectName + '/';
 
 
 if(location && location.origin == 'file://'){
