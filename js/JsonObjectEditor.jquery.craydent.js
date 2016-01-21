@@ -683,6 +683,7 @@ Column Count
             schema: self.current.specs.schema,
             subset: self.current.specs.subset*/
         });
+        self.updateHashLink();
         var closeAction = self.getCascadingProp('onPanelHide');
         if(closeAction){ closeAction(self.getState())}
 	};

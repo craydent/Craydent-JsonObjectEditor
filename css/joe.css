@@ -653,7 +653,7 @@
 /* ------------------------- BEGin JOE-BUTTON ---------------------*/
 
 .joe-title, joe-title{
-    font-family: 'Segoe UI Semibold';
+    font-family: 'Segoe UI Semibold','Helvetica Neue', sans-serif;
     font-size: 1.1em;
     display:block;
     padding-bottom:4px;
@@ -1063,7 +1063,7 @@ border: 1px inset #007ac2;
     line-height: 30px;
     overflow: hidden;
     font-size: 1.1em;
-    font-family: 'Segoe UI Semibold';
+    font-family: 'Segoe UI Semibold','Helvetica Neue', sans-serif;
 }
 
 
