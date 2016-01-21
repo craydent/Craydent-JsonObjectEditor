@@ -75,11 +75,11 @@ var JOEschemas = function() {
             idprop:'_id',
             _listTitle:
             '<joe-full-right><div class="joe-subtext">${class}</div>' +
-            '<div class="joe-subtext">${itemtype}</div><div class="joe-subtext">x${count}</div></joe-full-right>'
-            +'<joe-title>' +
-            '<span style="font-weight:normal">${class}.</span>${name}</joe-title>' +
-            '<joe-content>${this.comments.description} </joe-content>'+
-            '<joe-subtext${parameters}</joe-subtext>',
+            '<div class="joe-subtext">${itemtype}</div><div class="joe-subtext">x${count}</div></joe-full-right>'+
+            '<joe-subtext>${class}.</joe-subtext>'+
+            '<joe-title>${name}<span class="joe-subtext">(${args})</span></joe-title>' +
+            '<joe-content>${description} </joe-content>'+
+            '<joe-subtext>${args}</joe-subtext>',
             _title:'&fnof; ${name}',
             _listMenuTitle:function(item){
                 return _joe.current.subset.name +' Methods';
@@ -242,7 +242,7 @@ var specs = function(){
             //all items
             api_item_name:{
                 type:'content',
-                template:'<joe-title>${class}.${name}(${parameters})</joe-title>'
+                template:'<joe-title>${class}.${name}(${parameters})</joe-title><div>${description}</div>'
             },
             api_property_name:{
                 type:'content',
@@ -320,12 +320,28 @@ var specs = function(){
                         return 'Error generating doc: '+item.comments.error;
                     }else{
                         var h = '';
+                        var comment;
+                        var skips = ['info','description'];
                         for(var i in item.comments){
-                            if(item.comments[i] === true || item.comments[i] === false){
-                                h += '<br/><p class="joe-subtext"><b>'+i+': '+item.comments[i]+'</b></p>';
-                            }else{
-                                h += '<joe-subtitle class="joe-subtext"><b>'+i+'</b></joe-subtitle>' +
-                                    '<p >'+item.comments[i]+'</p>';
+                            comment = item.comments[i];
+                            if(skips.indexOf(i) == -1){
+                                if($.type(comment) == "object" || (($.type(comment) == "array")&& comment.length)){
+                                    comment = JSON.stringify(comment,'','')
+                                        .replace('"parameters":','parameters<br/>')
+                                        .replace(/\[/g,' ')
+                                        .replace(/]/g,'')
+                                        .replace(/\{/g,'')
+                                        .replace(/\}/g,'');
+                                }
+
+                                else if(item.comments[i] === true || item.comments[i] === false){
+                                    h += '<br/><p class="joe-subtext"><b>'+i+': '+item.comments[i]+'</b></p>';
+                                }else if(comment && comment.length){
+                                    h += '<joe-subtext><b>'+i+'</b></joe-subtext>' +
+            //                            '<pre>'+comment+'</pre>';
+                                        '<joe-content class="joe-boxed">'+comment+'</joe-content><br/>';
+
+                                }
                             }
 
 

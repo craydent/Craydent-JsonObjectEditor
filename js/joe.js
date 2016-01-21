@@ -5599,7 +5599,8 @@ ANALYSIS, IMPORT AND MERGE
                 propname:p,
                 ref: ref,
                 'class':ref,
-                parameters:(comments && (comments.params || comments.parameters)) || params,
+                args : params,
+                parameters:(comments && (comments.params || comments.parameters)) ||null,
                 _id:ref+'_'+funcName,
                 comments:evalString||{},
                 itemtype:'method',
@@ -5614,8 +5615,8 @@ ANALYSIS, IMPORT AND MERGE
                 }
             }
 
-            if(methodObj.comments && methodObj.comments.description){
-                methodObj.description =methodObj.comments.description;
+            if(methodObj.comments && (methodObj.comments.info||methodObj.comments.description)){
+                methodObj.description =methodObj.comments.info||methodObj.comments.description;
             }
             if(methodObj.comments && methodObj.comments.tags){
                 methodObj.tags =methodObj.comments.tags.split(',');
