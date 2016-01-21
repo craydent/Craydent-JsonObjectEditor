@@ -4865,7 +4865,12 @@ Field Rendering Helpers
         self.setEditingHashLink(false);
         var panelShowFunction = self.getCascadingProp('onPanelShow');
         try {
-            panelShowFunction && panelShowFunction(self.current.item, currentListItems);
+            panelShowFunction && panelShowFunction({
+                current:self.current.item,
+                list:currentListItems,
+                schema:self.current.schema,
+                title:self.current.title
+            });
         }catch(e){
             warn(e);
         }
