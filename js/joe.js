@@ -5714,7 +5714,7 @@ ANALYSIS, IMPORT AND MERGE
         return{
             object:self.current.item,
             list:self.current.filteredList,
-            schema:schema,
+            schema:self.current.schema.name,
             title:self.current.title
         }
     };
