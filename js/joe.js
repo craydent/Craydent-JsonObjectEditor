@@ -5842,7 +5842,7 @@ ANALYSIS, IMPORT AND MERGE
             var useHash = useHash.replace('#','');
             var hashBreakdown = useHash.split(hash_delimiter).condense();
             //hashBreakdown.removeAll('');
-            hashBreakdown.remove('');
+            hashBreakdown = hashBreakdown.filter(function(v){return v!=='';});
             //BUGFIX: condense no longer removes blank strings.
             if(!hashBreakdown.length){
                 return false;
