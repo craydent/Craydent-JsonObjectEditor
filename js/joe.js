@@ -689,6 +689,8 @@ Column Count
             schema: self.current.specs.schema,
             subset: self.current.specs.subset*/
         });
+        var closeAction = self.getCascadingProp('onPanelHide');
+        if(closeAction){ closeAction(self.getState())}
 	};
     var goingBackFromID;
     var goingBackQuery;
@@ -4860,17 +4862,12 @@ Field Rendering Helpers
         }
         self.panel.toggleClass('show-filters',leftMenuShowing && listMode);
 
-        self.specs.speechRecognition && self.Speech.initMic()
+        self.specs.speechRecognition && self.Speech.initMic();
 
         self.setEditingHashLink(false);
         var panelShowFunction = self.getCascadingProp('onPanelShow');
         try {
-            panelShowFunction && panelShowFunction({
-                current:self.current.item,
-                list:currentListItems,
-                schema:self.current.schema,
-                title:self.current.title
-            });
+            panelShowFunction && panelShowFunction(self.getState());
         }catch(e){
             warn(e);
         }
@@ -5611,7 +5608,7 @@ ANALYSIS, IMPORT AND MERGE
 
             if(classString){
                 try{
-                    methodObj.count = (classString.toString().match(new RegExp(funcName,'g'))||[]).length;
+                    methodObj.count = (classString.toString().match(new RegExp((parent||'.')+p,'g'))||[]).length;
                 }   catch(e){
                     warn('issue with static class: '+ref);
                 }
@@ -5705,10 +5702,29 @@ ANALYSIS, IMPORT AND MERGE
 		return reg.exec(name)[1];
 	};
 
+    this.getState = function(){
+        /*|{
+         featured:true,
+         description:'returns an abridged version of the calling joe panel including current object,list (filtered),schema and window title',
+         tags:'state, prop, getter',
+         returns:'(object)'
+
+         }|*/
+        return{
+            object:self.current.item,
+            list:self.current.filteredList,
+            schema:schema,
+            title:self.current.title
+        }
+    };
+
     this.getCascadingProp = function(propname){
         /*|{
-         tags:'helper',
-         description:'Gets a prop based off either current user specs, schema spec or joe default spec (respectively)'
+         tags:'helper,getter',
+         description:'Gets a prop based off either current user specs, schema spec or joe default spec (respectively)',
+         tags:'cascading, prop',
+         returns:'(mixed)',
+         featured:true
          }|*/
 
         var prop =
@@ -5725,8 +5741,9 @@ ANALYSIS, IMPORT AND MERGE
 	this.getIDProp = function(schema){
         /*|{
             featured:true,
-            tags:'helper',
-            description:'Gets the idprop of the current item, or any item with a passed schemaname.'
+            tags:'helper, prop,getter',
+            description:'Gets the idprop of the current item, or any item with a passed schemaname.',
+            returns:'(string)'
         }|*/
 
 		var prop = ( ((schema && self.schemas[schema]) || self.current.schema) && (self.current.schema.idprop || self.current.schema._listID)) || '_id' || 'id';
@@ -5777,6 +5794,13 @@ ANALYSIS, IMPORT AND MERGE
         hash_delimiter = ':::';
     }
     this.updateHashLink = function(){
+        /*|{
+         featured:true,
+         description:'updates the hashlink based on the calling joe.',
+         tags:'hash, SPA',
+         returns:'(string)'
+
+         }|*/
         if(!self.specs.useHashlink){
             return;
         }
@@ -5791,17 +5815,19 @@ ANALYSIS, IMPORT AND MERGE
             hashInfo.object_id = (self.current.object && self.current.object[self.getIDProp()])||'';
         }
 
-        var hashtemplate = ($.type(specs.useHashlink) == 'string')?specs.useHashlink:hash_delimiter+'${schema_name}'+hash_delimiter+'${object_id}${subset}';
+        var hashtemplate = ($.type(specs.useHashlink) == 'string')?
+            specs.useHashlink:
+            hash_delimiter+'${schema_name}'+((hashInfo.object_id||hashInfo.subset) && hash_delimiter || '')+'${object_id}${subset}';
         //$SET({'@!':fillTemplate(hashtemplate,hashInfo)},{noHistory:true});
         //$SET({'@!':fillTemplate(hashtemplate,hashInfo)});
         location.hash = fillTemplate(hashtemplate,hashInfo);
-
+        return location.hash;
     };
 
     this.readHashLink = function(hash){
         /*|{
             featured:true,
-            deacription:'reads the page hashlink and parses for collection, item id, subset and details section',
+            description:'reads the page hashlink and parses for collection, item id, subset and details section',
             tags:'hash, SPA',
             returns:'(bool)'
 
