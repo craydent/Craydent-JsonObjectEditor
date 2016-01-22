@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>JOE by Craydent</title>
+<!--	<link href="https://cdnjs.cloudflare.com/ajax/libs/winjs/4.4.0/css/ui-light.css" rel="stylesheet" />
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/winjs/4.4.0/js/base.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/winjs/4.4.0/js/ui.js"></script>-->
+
+	<link rel="stylesheet" href="capp.css"/>
+<!--<script src="_joecraydent.js"></script>-->
+	<script src="_joeinclude.js"></script>
+
+	<script src="capp.js"></script>
+	<script src="js/demo/joe-craydent-config.js"></script>
+	<script> var ENV = {scripts_dir:'/catnap/js/'};</script>
+<!--
+	<script src="http://platform.craydent.com/js/base.js"></script>
+	<script src="http://platform.craydent.com/js/user.js"></script>
+
+	<script src="/catnap/js/api/catnap.api-0.0.0.1.js"></script>
+-->
+
+</head>
+
+<!--<body bgcolor="#5f9ea0">-->
+<body bgcolor="#0099aa">
+<capp-wrapper >
+	<capp-header class="capp-retro">
+		<capp-header-bonus ></capp-header-bonus>
+			<capp-craydent-icon></capp-craydent-icon>
+			<capp-title>Craydent API</capp-title>
+			<!--<capp-button>button</capp-button>-->
+			<capp-menu>
+                <capp-menu-label>methods</capp-menu-label>
+                <capp-menu-option onclick="capp.Views.show('method','Craydent')">Craydent</capp-menu-option>
+                <capp-menu-option onclick="capp.Views.show('method','JOE')">JOE</capp-menu-option>
+                <capp-menu-option onclick="capp.Views.show('method','Catnap')">Catnap</capp-menu-option>
+            </capp-menu>
+            <capp-menu>
+                <capp-menu-label>properties</capp-menu-label>
+                <capp-menu-option onclick="capp.Views.show('property','Craydent')">Craydent</capp-menu-option>
+                <capp-menu-option onclick="capp.Views.show('property','JOE')">JOE</capp-menu-option>
+                <capp-menu-option onclick="capp.Views.show('property','Catnap')">Catnap</capp-menu-option>
+            </capp-menu>
+			<capp-button class="fright">USER</capp-button>
+	</capp-header>
+	<capp-body>
+		<capp-panel class="capp-bg-dark">
+			<capp-button  class="capp-panel-toggle">
+				<capp-button-icon><-></capp-button-icon>
+				<capp-button-label>expand / contract</capp-button-label>
+			</capp-button>
+			<!--<capp-button>-->
+				<!--<capp-button-icon>!</capp-button-icon>-->
+				<!--<capp-button-label>Another Test Button</capp-button-label>-->
+			<!--</capp-button>-->
+			<!-- METHODS -->
+			<capp-menu>
+				<capp-menu-label>
+					<capp-button-icon>ƒ</capp-button-icon>
+					<capp-button-label>Class Methods</capp-button-label>
+				</capp-menu-label>
+				<capp-menu-option onclick="capp.Views.show('method','Craydent')">
+					<capp-button-icon>JS</capp-button-icon>
+					<capp-button-label>Craydent.JS</capp-button-label>
+				</capp-menu-option>
+				<capp-menu-option onclick="capp.Views.show('method','JOE')">
+					<capp-button-icon>JOE</capp-button-icon>
+					<capp-button-label>JsonObjectEditor</capp-button-label>
+				</capp-menu-option>
+				<capp-menu-option onclick="capp.Views.show('method','Catnap')">
+					<capp-button-icon>CN</capp-button-icon>
+					<capp-button-label>Catnap</capp-button-label>
+				</capp-menu-option>
+			</capp-menu>
+			<!-- PROPERTIES -->
+			<capp-menu>
+				<capp-menu-label>
+					<capp-button-icon>Props</capp-button-icon>
+					<capp-button-label>Exposed Properties</capp-button-label>
+				</capp-menu-label>
+				<capp-menu-option onclick="capp.Views.show('property','Craydent')">
+					<capp-button-icon>JS</capp-button-icon>
+					<capp-button-label>Craydent.JS</capp-button-label>
+				</capp-menu-option>
+				<capp-menu-option onclick="capp.Views.show('property','JOE')">
+					<capp-button-icon>JOE</capp-button-icon>
+					<capp-button-label>JsonObjectEditor</capp-button-label>
+				</capp-menu-option>
+				<capp-menu-option onclick="capp.Views.show('property','Catnap')">
+					<capp-button-icon>CN</capp-button-icon>
+					<capp-button-label>Catnap</capp-button-label>
+				</capp-menu-option>
+			</capp-menu>
+		</capp-panel>
+		<capp-view id="joeHolder"></capp-view>
+	</capp-body>
+</capp-wrapper>
+<script>
+	var capp = new CraydentApp({
+
+		autoInit:true
+	});
+	var JOE = new JsonObjectEditor(specs());
+	JOE.init();
+	function preload(){
+		var methods = [];
+		var properties = [];
+		var apis = [];
+
+
+		function addAPI(classobj,classname,classstring){
+
+			var j = _joe.analyzeClassObject(classobj,classname,null,classstring);
+			methods = methods.concat(j.methods);
+			properties = properties.concat(j.properties);
+			apis.push({
+				name:classname,
+				_id:classname,
+				methods: j.methods.length,
+				properties: j.methods.length,
+				itemtype:'api'
+			});
+		}
+		addAPI(Craydent,'Craydent');
+		addAPI(JOE,'JOE',JsonObjectEditor);
+
+		_joe.addDataset('property',properties);
+		_joe.addDataset('method',methods);
+		_joe.addDataset('api',apis);
+		_joe.readHashLink();
+		//NPC.addDataCollection('property',properties,true);
+		//NPC.addDataCollection('method',methods,true);
+		//NPC.addDataCollection('api',apis,true);
+		//NPC.runHelperFunctions();
+	}
+	$(preload);
+/*
+	WinJS.UI.processAll().done(function () {
+		var splitView = document.querySelector(".splitView").winControl;
+		new WinJS.UI._WinKeyboard(splitView.paneElement); // Temporary workaround: Draw keyboard focus visuals on NavBarCommands
+	});*/
+</script>
+</body>
+</html>

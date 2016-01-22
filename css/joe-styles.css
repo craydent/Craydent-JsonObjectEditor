@@ -241,7 +241,7 @@ joe-boxed,.joe-boxed{
 .joe-history-button{background-image: url("../img/btns/history.png");  }
 .joe-comments-button{background-image: url("../img/btns/comment.png");  }
 .joe-object-button{background-image: url("../img/btns/object.png");  }
-.joe-delete-button{background-image: url("../img/btns/delete.png");  }
+.joe-delete-button{background-image: url("../img/btns/delete.png");  background-size:25px;}
 .joe-add-button{background-image: url("../img/btns/add.png");  }
 .joe-plus-button{background-image: url("../img/btns/plus.png");  }
 .joe-minus-button{background-image: url("../img/btns/minus.png");  }
