@@ -3,7 +3,7 @@
 
 Visually Edit Objects Using this GUI tool, what you do from there is up to you.
 
-TODO:
+todo:
 	-conditional fields
 
 ##What's new
