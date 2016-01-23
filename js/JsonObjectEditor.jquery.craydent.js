@@ -2272,7 +2272,7 @@ this.renderHTMLContent = function(specs){
 <-----------------------------*/
 	this.renderNumberField = function(prop){
         /*|{
-        description:'forces a float value'
+        description:'forces a float value',
          tags:'render,field,number'
          }|*/
 		/*var disabled = (profile.lockedFields.indexOf(prop.name) != -1 || prop.locked)?
