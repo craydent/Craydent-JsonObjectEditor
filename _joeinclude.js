@@ -1,5 +1,4 @@
 /* JavaScript include for: Json Object Editor
-by Corey Hadden
 last updated: CH March 2014
 */
 
